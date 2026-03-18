@@ -47,7 +47,7 @@ const CLASS_MAP: Record<string, string> = {
 const ITEM_LEVEL_RE = /^(.+?):\s*ITEM LEVEL\s*(\d+)/i;
 const REQUIRES_RE = /^REQUIRES:\s*(.+)/i;
 const STAT_LINE_RE =
-  /^(?:EVASION RATING|ARMOUR|ENERGY SHIELD|WARD|SPIRIT|PHYSICAL DAMAGE|ELEMENTAL DAMAGE|FIRE DAMAGE|COLD DAMAGE|LIGHTNING DAMAGE|CHAOS DAMAGE|CRITICAL HIT CHANCE|ATTACKS PER SECOND|RELOAD TIME|BLOCK CHANCE):\s*.+/i;
+  /^(?:EVASION RATING|ARMOUR|ENERGY SHIELD|WARD|SPIRIT|QUALITY|PHYSICAL DAMAGE|ELEMENTAL DAMAGE|FIRE DAMAGE|COLD DAMAGE|LIGHTNING DAMAGE|CHAOS DAMAGE|CRITICAL HIT CHANCE|ATTACKS PER SECOND|RELOAD TIME|BLOCK CHANCE):\s*.+/i;
 // PREFIX_RE/SUFFIX_RE/IMPLICIT_RE now searched as embedded patterns in parseOcrLines
 const HAS_CHARM_SLOTS_RE = /^HAS\s+\d+.*CHARM SLOTS?/i;
 const CORRUPTED_RE = /^CORRUPTED$/i;
@@ -75,10 +75,21 @@ interface ParsedOcrItem {
 }
 
 /**
- * Strip tier range from mod values: "+85(85-99)" → "+85"
+ * Strip tier ranges and clean common OCR errors in mod/stat text.
+ * "+85(85-99) TỌ MAXIMUM LIFE" → "+85 TO MAXIMUM LIFE"
  */
 function stripTierRanges(text: string): string {
-  return text.replace(/(\d+)\(\d+-\d+\)/g, "$1");
+  return text
+    .replace(/(\d+)\(\d+-\d+\)/g, "$1")                 // strip tier ranges
+    .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")  // also handle decimal ranges
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")    // strip diacritics (TỌ→TO)
+    .replace(/^[$#@!]+/, "")                              // strip leading junk chars
+    .replace(/\bSTRENCTH\b/gi, "STRENGTH")                // common OCR typos
+    .replace(/\bLGNITE\b/gi, "IGNITE")
+    .replace(/\bFLAMMABIL[IT]*Y\b/gi, "FLAMMABILITY")
+    .replace(/\bMAGNITUD[E!]\b/gi, "MAGNITUDE")
+    .replace(/\bRESISTANC[E€]\b/gi, "RESISTANCE")
+    .trim();
 }
 
 /**
@@ -153,8 +164,11 @@ function isNoiseLine(line: string): boolean {
   if (/\b(N?VENTORY|OSMETICS?|COSMETICS?|INSPECT)\b/i.test(normalized)) return true;
   // Game info (may have diacritics or partial text)
   if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|GOLD|WOODLAND|HIDEOUT|TOWN)\b/i.test(normalized)) return true;
+  if (/^\*?Monster\s*$/i.test(normalized)) return true; // standalone "Monster" from map overlay
   if (/^\d+\s*(FPS|FBS|г8S)?\s*$/i.test(line)) return true; // FPS counter
-  if (/^(MORE THAN \d+|FATE OF)/i.test(normalized)) return true;
+  if (/^(MORE THAN \d+|FATE OF|\*?LEAGUE\s*$)/i.test(normalized)) return true;
+  // "Fate of the Vaal League" split across lines by AVF
+  if (/\b(VAAL LEAGUE|VAAL|LEAGUE)\s*$/i.test(normalized) && line.length < 20) return true;
   return false;
 }
 
