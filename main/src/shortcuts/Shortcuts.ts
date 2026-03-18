@@ -11,6 +11,7 @@ import { HostClipboard } from "./HostClipboard";
 import { OcrWorker } from "../vision/link-main";
 import { captureScreenAroundCursor } from "../vision/ScreenCapture";
 import { ocrWithAppleVision } from "../vision/AppleVisionOcr";
+import { loadStatMatchers } from "../vision/StatMatcher";
 import type { ShortcutAction } from "../../../ipc/types";
 import type { Logger } from "../RemoteLogger";
 import type { OverlayWindow } from "../windowing/OverlayWindow";
@@ -39,6 +40,18 @@ export class Shortcuts {
     server: ServerEvents,
   ) {
     const ocrWorker = await OcrWorker.create();
+
+    // Load stat matchers for OCR mod normalization (GFN feature)
+    try {
+      const isDev = process.env.VITE_DEV_SERVER_URL != null;
+      const dataDir = isDev
+        ? require("path").join(__dirname, "../../renderer/public/data/en")
+        : require("path").join(__dirname, "../renderer/data/en");
+      loadStatMatchers(dataDir);
+    } catch (e) {
+      console.log("[GFN] Failed to load stat matchers:", e);
+    }
+
     const shortcuts = new Shortcuts(
       logger,
       overlay,

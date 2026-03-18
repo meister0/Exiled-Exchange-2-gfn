@@ -11,6 +11,8 @@
  *   "Item Class: Belts\nRarity: Rare\nName\nBase Type\n--------\n..."
  */
 
+import { matchStatLine } from "./StatMatcher";
+
 // Singular OCR class → clipboard "Item Class" value
 const CLASS_MAP: Record<string, string> = {
   AMULET: "Amulets",
@@ -508,6 +510,15 @@ export function reconstructClipboard(ocrText: string): string | null {
     parsed.baseType = parsed.itemClass;
     console.log(`[GFN] No base type found, using item class: ${parsed.itemClass}`);
   }
+
+  // Normalize mods: match OCR text against stats.ndjson for proper casing.
+  // "+137 TO MAXIMUM LIFE" → "+137 to Maximum Life"
+  parsed.explicitMods = parsed.explicitMods.map(
+    (mod) => matchStatLine(mod) ?? mod,
+  );
+  parsed.implicitMods = parsed.implicitMods.map(
+    (mod) => matchStatLine(mod) ?? mod,
+  );
 
   const rarity = detectRarity(parsed);
   const sections: string[] = [];
