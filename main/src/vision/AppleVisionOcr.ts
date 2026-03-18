@@ -1,7 +1,6 @@
-import { execFile } from "child_process";
-import { writeFile, unlink } from "fs/promises";
+import { spawn } from "child_process";
 import path from "path";
-import { app, nativeImage } from "electron";
+import { nativeImage } from "electron";
 import { reconstructClipboard } from "./ClipboardReconstructor";
 
 export interface AvfTextObservation {
@@ -46,19 +45,9 @@ export async function ocrWithAppleVision(
   );
   const pngBuffer = img.toPNG();
 
-  // Write to temp file
-  const tmpPath = path.join(app.getPath("temp"), `avf-ocr-${Date.now()}.png`);
-  await writeFile(tmpPath, pngBuffer);
-
-  // 2. Call Swift helper
+  // 2. Call Swift helper — pipe PNG via stdin (no temp file I/O)
   const avfBinary = path.join(__dirname, "avf-ocr");
-  let observations: AvfTextObservation[];
-  try {
-    const stdout = await execFileAsync(avfBinary, [tmpPath]);
-    observations = JSON.parse(stdout) as AvfTextObservation[];
-  } finally {
-    unlink(tmpPath).catch(() => {});
-  }
+  const observations = await spawnAvfOcr(avfBinary, pngBuffer);
 
   // 3. Cluster: find observations belonging to tooltip (near cursor)
   const tooltipObs = clusterTooltipObservations(
@@ -213,14 +202,35 @@ function proximityFallback(
   return scored.slice(0, 20).map((s) => s.obs);
 }
 
-function execFileAsync(binary: string, args: string[]): Promise<string> {
+function spawnAvfOcr(
+  binary: string,
+  pngData: Buffer,
+): Promise<AvfTextObservation[]> {
   return new Promise((resolve, reject) => {
-    execFile(binary, args, { timeout: 10000 }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`avf-ocr failed: ${stderr || error.message}`));
-      } else {
-        resolve(stdout);
+    const proc = spawn(binary, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const chunks: Buffer[] = [];
+    let stderr = "";
+
+    proc.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`avf-ocr exited ${code}: ${stderr}`));
+        return;
+      }
+      try {
+        const json = Buffer.concat(chunks).toString();
+        resolve(JSON.parse(json) as AvfTextObservation[]);
+      } catch (e) {
+        reject(new Error(`avf-ocr JSON parse error: ${e}`));
       }
     });
+
+    proc.on("error", (err) => reject(err));
+
+    // Pipe PNG data and close stdin
+    proc.stdin.write(pngData);
+    proc.stdin.end();
   });
 }

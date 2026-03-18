@@ -3,7 +3,8 @@ import Vision
 import AppKit
 
 // Apple Vision Framework OCR helper.
-// Usage: avf-ocr <png-file-path>
+// Usage: avf-ocr [png-file-path]
+//   If no path given, reads PNG from stdin.
 // Output: JSON array of recognized text observations to stdout.
 // Each observation: { "text": "...", "confidence": 0.95, "bbox": { "x": 0, "y": 0, "w": 100, "h": 20 } }
 // Bounding box is in pixel coordinates, origin top-left.
@@ -21,14 +22,22 @@ struct BBox: Codable {
     let h: Int
 }
 
-guard CommandLine.arguments.count >= 2 else {
-    fputs("Usage: avf-ocr <png-file-path>\n", stderr)
-    exit(1)
+let nonFlagArgs = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("--") }
+let imageData: Data
+if let filePath = nonFlagArgs.first {
+    // Read from file
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
+        fputs("Error: cannot read file at \(filePath)\n", stderr)
+        exit(1)
+    }
+    imageData = data
+} else {
+    // Read from stdin
+    imageData = FileHandle.standardInput.readDataToEndOfFile()
 }
 
-let filePath = CommandLine.arguments[1]
-guard let image = NSImage(contentsOfFile: filePath) else {
-    fputs("Error: cannot load image at \(filePath)\n", stderr)
+guard let image = NSImage(data: imageData) else {
+    fputs("Error: cannot decode image data\n", stderr)
     exit(1)
 }
 

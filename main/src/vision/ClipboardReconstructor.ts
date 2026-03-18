@@ -163,7 +163,8 @@ function isNoiseLine(line: string): boolean {
   // UI labels (may be truncated by AVF crop: "NVENTORY", "OSMETICS")
   if (/\b(N?VENTORY|OSMETICS?|COSMETICS?|INSPECT)\b/i.test(normalized)) return true;
   // Game info (may have diacritics or partial text)
-  if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|GOLD|WOODLAND|HIDEOUT|TOWN)\b/i.test(normalized)) return true;
+  if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|WOODLAND|HIDEOUT|TOWN)\b/i.test(normalized)) return true;
+  if (/\d+\s*GOL[DP]?/i.test(normalized)) return true; // "34 GOLD", "34 GOLPonster" (merged)
   if (/^\*?Monster\s*$/i.test(normalized)) return true; // standalone "Monster" from map overlay
   if (/^\d+\s*(FPS|FBS|г8S)?\s*$/i.test(line)) return true; // FPS counter
   if (/^(MORE THAN \d+|FATE OF|\*?LEAGUE\s*$)/i.test(normalized)) return true;
