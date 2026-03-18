@@ -1,6 +1,5 @@
 import { spawn } from "child_process";
 import path from "path";
-import { nativeImage } from "electron";
 import { reconstructClipboard } from "./ClipboardReconstructor";
 
 export interface AvfTextObservation {
@@ -38,16 +37,14 @@ export async function ocrWithAppleVision(
 ): Promise<AvfOcrResult> {
   const startTime = performance.now();
 
-  // 1. Convert BGRA buffer to PNG via NativeImage
-  const img = nativeImage.createFromBitmap(
-    Buffer.from(screenshot.data),
-    { width: screenshot.width, height: screenshot.height },
-  );
-  const pngBuffer = img.toPNG();
-
-  // 2. Call Swift helper — pipe PNG via stdin (no temp file I/O)
+  // 1. Send raw BGRA directly to Swift helper — no PNG encode/decode overhead.
+  // This avoids blocking the main thread with nativeImage.toPNG().
   const avfBinary = path.join(__dirname, "avf-ocr");
-  const observations = await spawnAvfOcr(avfBinary, pngBuffer);
+  const observations = await spawnAvfOcr(
+    avfBinary,
+    Buffer.from(screenshot.data),
+    ["--bgra", String(screenshot.width), String(screenshot.height)],
+  );
 
   // 3. Cluster: find observations belonging to tooltip (near cursor)
   const tooltipObs = clusterTooltipObservations(
@@ -204,10 +201,11 @@ function proximityFallback(
 
 function spawnAvfOcr(
   binary: string,
-  pngData: Buffer,
+  data: Buffer,
+  args: string[] = [],
 ): Promise<AvfTextObservation[]> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(binary, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const proc = spawn(binary, args, { stdio: ["pipe", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
     let stderr = "";
 
@@ -229,8 +227,8 @@ function spawnAvfOcr(
 
     proc.on("error", (err) => reject(err));
 
-    // Pipe PNG data and close stdin
-    proc.stdin.write(pngData);
+    // Pipe data and close stdin
+    proc.stdin.write(data);
     proc.stdin.end();
   });
 }

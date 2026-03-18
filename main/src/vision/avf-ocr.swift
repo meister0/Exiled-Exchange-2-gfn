@@ -1,13 +1,13 @@
 import Foundation
 import Vision
-import AppKit
+import CoreGraphics
 
 // Apple Vision Framework OCR helper.
-// Usage: avf-ocr [png-file-path]
-//   If no path given, reads PNG from stdin.
+// Usage:
+//   avf-ocr --bgra <width> <height>   — reads raw BGRA pixels from stdin
+//   avf-ocr <png-file-path>            — reads PNG from file
+//   avf-ocr                            — reads PNG from stdin
 // Output: JSON array of recognized text observations to stdout.
-// Each observation: { "text": "...", "confidence": 0.95, "bbox": { "x": 0, "y": 0, "w": 100, "h": 20 } }
-// Bounding box is in pixel coordinates, origin top-left.
 
 struct TextObservation: Codable {
     let text: String
@@ -22,28 +22,57 @@ struct BBox: Codable {
     let h: Int
 }
 
-let nonFlagArgs = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("--") }
-let imageData: Data
-if let filePath = nonFlagArgs.first {
-    // Read from file
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
-        fputs("Error: cannot read file at \(filePath)\n", stderr)
+let args = Array(CommandLine.arguments.dropFirst())
+var cgImage: CGImage
+
+if args.first == "--bgra", args.count >= 3,
+   let width = Int(args[1]), let height = Int(args[2]) {
+    // Raw BGRA from stdin — skip PNG encode/decode entirely
+    let rawData = FileHandle.standardInput.readDataToEndOfFile()
+    let expectedSize = width * height * 4
+    guard rawData.count == expectedSize else {
+        fputs("Error: expected \(expectedSize) bytes for \(width)x\(height) BGRA, got \(rawData.count)\n", stderr)
         exit(1)
     }
-    imageData = data
+
+    // Create CGImage directly from BGRA data
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.first.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+    guard let provider = CGDataProvider(data: rawData as CFData),
+          let img = CGImage(
+              width: width, height: height,
+              bitsPerComponent: 8, bitsPerPixel: 32,
+              bytesPerRow: width * 4,
+              space: colorSpace, bitmapInfo: bitmapInfo,
+              provider: provider, decode: nil,
+              shouldInterpolate: false, intent: .defaultIntent
+          ) else {
+        fputs("Error: cannot create CGImage from BGRA data\n", stderr)
+        exit(1)
+    }
+    cgImage = img
 } else {
-    // Read from stdin
-    imageData = FileHandle.standardInput.readDataToEndOfFile()
-}
+    // PNG mode (file or stdin)
+    let nonFlagArgs = args.filter { !$0.hasPrefix("--") }
+    let imageData: Data
+    if let filePath = nonFlagArgs.first {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
+            fputs("Error: cannot read file at \(filePath)\n", stderr)
+            exit(1)
+        }
+        imageData = data
+    } else {
+        imageData = FileHandle.standardInput.readDataToEndOfFile()
+    }
 
-guard let image = NSImage(data: imageData) else {
-    fputs("Error: cannot decode image data\n", stderr)
-    exit(1)
-}
-
-guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-    fputs("Error: cannot convert to CGImage\n", stderr)
-    exit(1)
+    guard let dataProvider = CGDataProvider(data: imageData as CFData),
+          let img = CGImage(pngDataProviderSource: dataProvider,
+                            decode: nil, shouldInterpolate: false,
+                            intent: .defaultIntent) else {
+        fputs("Error: cannot decode PNG image\n", stderr)
+        exit(1)
+    }
+    cgImage = img
 }
 
 let imageWidth = cgImage.width
@@ -51,7 +80,7 @@ let imageHeight = cgImage.height
 
 let request = VNRecognizeTextRequest()
 request.recognitionLevel = .accurate
-request.usesLanguageCorrection = false  // PoE2 text is game-specific, correction hurts
+request.usesLanguageCorrection = false
 request.recognitionLanguages = ["en-US"]
 
 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
@@ -68,8 +97,6 @@ for observation in results {
     let text = observation.topCandidates(1).first?.string ?? ""
     let confidence = observation.confidence
 
-    // Vision bbox is normalized (0-1), origin bottom-left.
-    // Convert to pixel coords, origin top-left.
     let box = observation.boundingBox
     let x = Int(box.origin.x * Double(imageWidth))
     let y = Int((1.0 - box.origin.y - box.height) * Double(imageHeight))
