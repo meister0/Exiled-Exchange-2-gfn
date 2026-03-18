@@ -87,9 +87,14 @@ export class Shortcuts {
       process.nextTick(() => {
         if (isActive === this.poeWindow.isActive) {
           if (isActive) {
-            this.register();
+            if (!this._isGfnMode) {
+              // Normal mode: register via globalShortcut
+              this.register();
+            }
           } else {
-            this.unregister();
+            if (!this._isGfnMode) {
+              this.unregister();
+            }
           }
         }
       });
@@ -101,10 +106,42 @@ export class Shortcuts {
       }
     });
 
+    // GFN mode: use uIOhook for hotkey detection instead of globalShortcut.
+    // uIOhook works in fullscreen Spaces, poeWindow.isActive gates it to GFN only.
     uIOhook.on("keydown", (e) => {
-      if (!this.logKeys) return;
+      if (this.logKeys) {
+        const pressed = eventToString(e);
+        this.logger.write(`debug [Shortcuts] Keydown ${pressed}`);
+      }
+
+      if (!this._isGfnMode || !this.poeWindow.isActive) return;
+
       const pressed = eventToString(e);
-      this.logger.write(`debug [Shortcuts] Keydown ${pressed}`);
+      for (const entry of this.actions) {
+        if (entry.shortcut === pressed) {
+          console.log(`[GFN] uIOhook matched: "${pressed}" → ${entry.action.type}`);
+
+          // Release keys
+          if (entry.keepModKeys) {
+            const nonModKey = entry.shortcut
+              .split(" + ")
+              .filter((key) => !isModKey(key))[0];
+            uIOhook.keyToggle(UiohookKey[nonModKey as UiohookKeyT], "up");
+          } else {
+            entry.shortcut
+              .split(" + ")
+              .reverse()
+              .forEach((key) => {
+                uIOhook.keyToggle(UiohookKey[key as UiohookKeyT], "up");
+              });
+          }
+
+          // Must use nextTick — uIOhook callback runs on native thread,
+          // OverlayController calls must happen on main JS thread
+          process.nextTick(() => this.handleGfnAction(entry));
+          break;
+        }
+      }
     });
     uIOhook.on("keyup", (e) => {
       if (!this.logKeys) return;
@@ -195,7 +232,69 @@ export class Shortcuts {
         action.action.type === "toggle-overlay",
     );
 
+    if (!this._isGfnMode) {
+      this.unregister();
+    }
     this.actions = validActions;
+
+    if (!this._isGfnMode && this.poeWindow.isActive) {
+      this.register();
+    }
+
+    if (this._isGfnMode) {
+      console.log(`[GFN] ${validActions.length} actions loaded (uIOhook mode)`);
+    }
+  }
+
+
+  private handleGfnAction(entry: ShortcutAction) {
+    if (entry.action.type === "toggle-overlay") {
+      this.areaTracker.removeListeners();
+      this.overlay.toggleActiveState();
+    } else if (entry.action.type === "copy-item") {
+      const { action } = entry;
+      const pressPosition = screen.getCursorScreenPoint();
+      console.log("[GFN] copy-item → OCR pipeline");
+      captureScreenAroundCursor()
+        .then((capture) => {
+          if (capture.image.width === 0 || capture.image.height === 0) {
+            throw new Error("Empty screenshot (0x0)");
+          }
+          return ocrWithAppleVision(capture.image, capture.cursorInCrop);
+        })
+        .then((result) => {
+          console.log(`[GFN] OCR done in ${Math.round(result.elapsed)}ms`);
+          if (result.clipboard) {
+            this.areaTracker.removeListeners();
+            this.server.sendEventTo("last-active", {
+              name: "MAIN->CLIENT::item-text",
+              payload: {
+                target: action.target,
+                clipboard: result.clipboard,
+                position: pressPosition,
+                focusOverlay: Boolean(action.focusOverlay),
+              },
+            });
+            if (action.focusOverlay && this.overlay.wasUsedRecently) {
+              this.overlay.assertOverlayActive();
+            }
+          } else {
+            console.log("[GFN] Could not reconstruct clipboard from OCR");
+          }
+        })
+        .catch((err) => {
+          console.error("[GFN] OCR failed:", err instanceof Error ? err.message : err);
+        });
+    } else if (entry.action.type === "paste-in-chat") {
+      typeInChat(entry.action.text, entry.action.send, this.clipboard);
+    } else if (entry.action.type === "trigger-event") {
+      this.server.sendEventTo("broadcast", {
+        name: "MAIN->CLIENT::widget-action",
+        payload: { target: entry.action.target },
+      });
+    } else if (entry.action.type === "stash-search") {
+      stashSearch(entry.action.text, this.clipboard, this.overlay);
+    }
   }
 
   private register() {

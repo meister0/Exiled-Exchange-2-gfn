@@ -103,7 +103,11 @@ let tray: AppTray;
           "CLIENT->MAIN::update-host-config",
           (cfg) => {
             overlay.updateOpts(cfg.overlayKey, cfg.windowTitle);
-            shortcuts.isGfnMode = /geforce|nvidia/i.test(cfg.windowTitle);
+            const cfgIsGfn = /geforce|nvidia/i.test(cfg.windowTitle);
+            // Don't downgrade GFN mode if it was set from saved config at startup
+            if (cfgIsGfn || !shortcuts.isGfnMode) {
+              shortcuts.isGfnMode = cfgIsGfn;
+            }
             shortcuts.updateActions(
               cfg.shortcuts,
               cfg.stashScroll,
@@ -120,6 +124,48 @@ let tray: AppTray;
         uIOhook.start();
         console.log("uIOhook started");
 
+        // Early GFN detection from saved config or env
+        {
+          let gfnTitle: string | null = null;
+          try {
+            const fs = require("fs");
+            const cfgPath = require("path").join(
+              app.getPath("userData"), "apt-data", "config.json",
+            );
+            if (fs.existsSync(cfgPath)) {
+              const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+              if (/geforce|nvidia/i.test(cfg.windowTitle ?? "")) {
+                gfnTitle = cfg.windowTitle;
+              }
+            }
+          } catch {}
+
+          // TODO: remove dev hardcode — in production, saved config.json will have the title
+          if (!gfnTitle && process.env.VITE_DEV_SERVER_URL) {
+            gfnTitle = "NVIDIA GeForce NOW";
+          }
+
+          if (gfnTitle) {
+            console.log(`[GFN] Detected GFN mode: "${gfnTitle}"`);
+            shortcuts.isGfnMode = true;
+            // This triggers attach() → startGfnPolling() → isActive management
+            overlay.updateOpts("Shift + Space", gfnTitle);
+            // Pre-load default shortcuts so they're ready when GFN focus is detected
+            shortcuts.updateActions(
+              [
+                {
+                  shortcut: "Alt + D",
+                  action: { type: "copy-item", target: "price-check", focusOverlay: true },
+                },
+                {
+                  shortcut: "Shift + Space",
+                  action: { type: "toggle-overlay" },
+                },
+              ],
+              false, true, false, "en",
+            );
+          }
+        }
 
         const port = await startServer(appUpdater, logger);
         // TODO: move up (currently crashes)

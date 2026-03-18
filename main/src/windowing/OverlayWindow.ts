@@ -12,10 +12,10 @@ export class OverlayWindow {
   public isInteractable = false;
   public wasUsedRecently = true;
   private window?: BrowserWindow;
-  private gfnWindow?: BrowserWindow;
   private overlayKey: string = "Shift + Space";
   private isOverlayKeyUsed = false;
   private appUrl = "";
+  private _windowTitle = "";
 
   constructor(
     private server: ServerEvents,
@@ -105,7 +105,17 @@ export class OverlayWindow {
   assertOverlayActive = () => {
     if (!this.isInteractable) {
       this.isInteractable = true;
-      OverlayController.activateOverlay();
+      if (this.isGfnMode && this.window) {
+        // GFN: show window directly (OverlayController not attached)
+        this.server.sendEventTo("broadcast", {
+          name: "MAIN->OVERLAY::focus-change",
+          payload: { game: false, overlay: true, usingHotkey: true },
+        });
+        this.window.show();
+        this.window.focus();
+      } else {
+        OverlayController.activateOverlay();
+      }
       this.poeWindow.isActive = false;
     }
   };
@@ -113,10 +123,23 @@ export class OverlayWindow {
   assertGameActive = () => {
     if (this.isInteractable) {
       this.isInteractable = false;
-      OverlayController.focusTarget();
+      if (this.isGfnMode && this.window) {
+        // GFN: hide window directly
+        this.server.sendEventTo("broadcast", {
+          name: "MAIN->OVERLAY::focus-change",
+          payload: { game: true, overlay: false, usingHotkey: true },
+        });
+        this.window.hide();
+      } else {
+        OverlayController.focusTarget();
+      }
       this.poeWindow.isActive = true;
     }
   };
+
+  private get isGfnMode() {
+    return /geforce|nvidia/i.test(this._windowTitle);
+  }
 
   toggleActiveState = () => {
     this.isOverlayKeyUsed = true;
@@ -129,6 +152,7 @@ export class OverlayWindow {
 
   updateOpts(overlayKey: string, windowTitle: string) {
     this.overlayKey = overlayKey;
+    this._windowTitle = windowTitle;
     this.poeWindow.attach(this.window, windowTitle);
   }
 
