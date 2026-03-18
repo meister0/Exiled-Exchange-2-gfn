@@ -11,7 +11,7 @@
  *   "Item Class: Belts\nRarity: Rare\nName\nBase Type\n--------\n..."
  */
 
-import { matchStatLine } from "./StatMatcher";
+import { matchStatLine, fuzzyFixWords } from "./StatMatcher";
 
 // Singular OCR class → clipboard "Item Class" value
 const CLASS_MAP: Record<string, string> = {
@@ -86,11 +86,7 @@ function stripTierRanges(text: string): string {
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")  // also handle decimal ranges
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")    // strip diacritics (TỌ→TO)
     .replace(/^[$#@!]+/, "")                              // strip leading junk chars
-    .replace(/\bSTRENCTH\b/gi, "STRENGTH")                // common OCR typos
-    .replace(/\bLGNITE\b/gi, "IGNITE")
-    .replace(/\bFLAMMABIL[IT]*Y\b/gi, "FLAMMABILITY")
-    .replace(/\bMAGNITUD[E!]\b/gi, "MAGNITUDE")
-    .replace(/\bRESISTANC[E€]\b/gi, "RESISTANCE")
+    .replace(/[!€]+$/g, "")                               // strip trailing junk
     .trim();
 }
 
@@ -147,6 +143,20 @@ function extractEmbeddedMod(line: string): string | null {
     /GAIN\s+\d+[\d.()\-]*\s+\w+\s+PER\s+ENEMY\s+HIT\b[^.]*/i,
   );
   if (gainMatch) return gainMatch[0].trim();
+
+  // Pattern: "...X% REDUCED/INCREASED {EFFECT} DURATION..."
+  const durationMatch = line.match(
+    /\d+[\d.%()\-]*\s+(REDUCED|INCREASED)\s+\w+\s+DURATION\b[^.]*/i,
+  );
+  if (durationMatch) return durationMatch[0].replace(/[.,]+$/, "").trim();
+
+  // Pattern: "...X% INCREASED/REDUCED {STAT}..." (standalone % mod embedded in noise)
+  if (NOISE_RE.test(line) || MAP_MOD_RE.test(line)) {
+    const pctMatch = line.match(
+      /\d+[\d.%()\-]*\s+(REDUCED|INCREASED)\s+(?!EXPEDITION|RARITY|NUMBER|WAYSTONES|MONSTER)\w[\w\s]*?(RATE|SPEED|DURATION|DAMAGE|RESISTANCE)\b/i,
+    );
+    if (pctMatch) return pctMatch[0].replace(/[.,]+$/, "").trim();
+  }
 
   // Pattern: embedded "+X(range) TO MAXIMUM/FIRE/COLD/LIGHTNING..."
   // Only when line also contains map mod noise
@@ -517,14 +527,16 @@ export function reconstructClipboard(ocrText: string): string | null {
     console.log(`[GFN] No base type found, using item class: ${parsed.itemClass}`);
   }
 
-  // Normalize mods: match OCR text against stats.ndjson for proper casing.
-  // "+137 TO MAXIMUM LIFE" → "+137 to Maximum Life"
-  parsed.explicitMods = parsed.explicitMods.map(
-    (mod) => matchStatLine(mod) ?? mod,
-  );
-  parsed.implicitMods = parsed.implicitMods.map(
-    (mod) => matchStatLine(mod) ?? mod,
-  );
+  // Normalize mods: fix OCR typos via dictionary, then match against stats.ndjson.
+  // "STRENCTH" → "STRENGTH", "+137 TO MAXIMUM LIFE" → "+137 to Maximum Life"
+  parsed.explicitMods = parsed.explicitMods.map((mod) => {
+    const fixed = fuzzyFixWords(mod);
+    return matchStatLine(fixed) ?? fixed;
+  });
+  parsed.implicitMods = parsed.implicitMods.map((mod) => {
+    const fixed = fuzzyFixWords(mod);
+    return matchStatLine(fixed) ?? fixed;
+  });
 
   const rarity = detectRarity(parsed);
   const sections: string[] = [];
