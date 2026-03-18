@@ -248,7 +248,9 @@ export class Shortcuts {
 
 
   private handleGfnAction(entry: ShortcutAction) {
+    console.log(`[GFN] handleGfnAction: type=${entry.action.type}`);
     if (entry.action.type === "toggle-overlay") {
+      console.log("[GFN] calling toggleActiveState");
       this.areaTracker.removeListeners();
       this.overlay.toggleActiveState();
     } else if (entry.action.type === "copy-item") {

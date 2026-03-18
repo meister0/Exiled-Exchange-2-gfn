@@ -102,11 +102,10 @@ let tray: AppTray;
         eventPipe.onEventAnyClient(
           "CLIENT->MAIN::update-host-config",
           (cfg) => {
-            overlay.updateOpts(cfg.overlayKey, cfg.windowTitle);
-            const cfgIsGfn = /geforce|nvidia/i.test(cfg.windowTitle);
-            // Don't downgrade GFN mode if it was set from saved config at startup
-            if (cfgIsGfn || !shortcuts.isGfnMode) {
-              shortcuts.isGfnMode = cfgIsGfn;
+            // Don't overwrite GFN windowTitle with renderer's default "Path of Exile 2"
+            if (!shortcuts.isGfnMode) {
+              overlay.updateOpts(cfg.overlayKey, cfg.windowTitle);
+              shortcuts.isGfnMode = /geforce|nvidia/i.test(cfg.windowTitle);
             }
             shortcuts.updateActions(
               cfg.shortcuts,

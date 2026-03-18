@@ -103,10 +103,16 @@ export class OverlayWindow {
   }
 
   assertOverlayActive = () => {
+    console.log(`[GFN] assertOverlayActive: interactable=${this.isInteractable}, gfn=${this.isGfnMode}, hasWindow=${!!this.window}`);
     if (!this.isInteractable) {
       this.isInteractable = true;
       if (this.isGfnMode && this.window) {
         // GFN: show window directly (OverlayController not attached)
+        // First tell renderer overlay is ready (enables widgets)
+        this.server.sendEventTo("broadcast", {
+          name: "MAIN->OVERLAY::overlay-attached",
+          payload: undefined,
+        });
         this.server.sendEventTo("broadcast", {
           name: "MAIN->OVERLAY::focus-change",
           payload: { game: false, overlay: true, usingHotkey: true },
@@ -124,6 +130,7 @@ export class OverlayWindow {
   };
 
   assertGameActive = () => {
+    console.log(`[GFN] assertGameActive: interactable=${this.isInteractable}, gfn=${this.isGfnMode}`);
     if (this.isInteractable) {
       this.isInteractable = false;
       if (this.isGfnMode && this.window) {
@@ -145,6 +152,7 @@ export class OverlayWindow {
   }
 
   toggleActiveState = () => {
+    console.log(`[GFN] toggleActiveState: interactable=${this.isInteractable}`);
     this.isOverlayKeyUsed = true;
     if (this.isInteractable) {
       this.assertGameActive();
