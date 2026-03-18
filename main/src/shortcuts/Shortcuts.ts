@@ -10,6 +10,7 @@ import { WidgetAreaTracker } from "../windowing/WidgetAreaTracker";
 import { HostClipboard } from "./HostClipboard";
 import { OcrWorker } from "../vision/link-main";
 import { captureScreenAroundCursor } from "../vision/ScreenCapture";
+import { ocrWithAppleVision } from "../vision/AppleVisionOcr";
 import type { ShortcutAction } from "../../../ipc/types";
 import type { Logger } from "../RemoteLogger";
 import type { OverlayWindow } from "../windowing/OverlayWindow";
@@ -341,11 +342,19 @@ export class Shortcuts {
                 if (capture.image.width === 0 || capture.image.height === 0) {
                   throw new Error("Empty screenshot (0x0) — macOS may need Screen Recording permission restart");
                 }
-                return this.ocrWorker.ocrGfnItem(capture.image, capture.cursorInCrop);
+
+                // macOS: use Apple Vision Framework (fast, accurate, has bounding boxes)
+                // Other: fallback to Tesseract WASM worker
+                if (process.platform === "darwin") {
+                  return ocrWithAppleVision(capture.image, capture.cursorInCrop);
+                } else {
+                  return this.ocrWorker.ocrGfnItem(capture.image, capture.cursorInCrop)
+                    .then((r) => ({ ...r, tooltipText: r.text, fullText: r.text, observations: [] }));
+                }
               })
               .then((result) => {
-                console.log(`[GFN] OCR done in ${Math.round(result.elapsed)}ms, confidence=${result.confidence}, text length=${result.text.length}`);
-                console.log(`[GFN] OCR raw text:\n${result.text.substring(0, 1500)}`);
+                console.log(`[GFN] OCR done in ${Math.round(result.elapsed)}ms, confidence=${result.confidence}`);
+                console.log(`[GFN] Tooltip text:\n${result.tooltipText.substring(0, 1500)}`);
 
                 const clipboardText = result.clipboard;
                 if (clipboardText) {

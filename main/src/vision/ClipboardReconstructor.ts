@@ -102,6 +102,62 @@ function cleanName(text: string): string {
     .trim();
 }
 
+/**
+ * Try to extract an item mod from a merged map+item line.
+ * AVF merges text at the same Y height, e.g.:
+ *   "4 CONTAINS 7 ADDITIONAL PACKS OF MONSTERS ADDS 13(11-13) TO 18(18-21) COLD DAMAGE"
+ *   "MONSTERS DEAL 16% OF DAMAGE AS EXTRA CADDS 1(1-2) TO 43(41-47) LIGHTNING DAMAGE"
+ *   "100% INCREASED EXPEDITION EXPLOSIVE PLACEMINFKAN LEECH 7.18(7-7.9)% OF PHYSICAL..."
+ * Returns the extracted item mod portion, or null.
+ */
+function extractEmbeddedMod(line: string): string | null {
+  // Pattern: "...ADDS X(range) TO Y(range) {DAMAGE_TYPE} DAMAGE..."
+  const addsMatch = line.match(
+    /ADDS\s+\d+[\d.()\-]*\s+TO\s+\d+[\d.()\-]*\s+\w+[\s,.]*(DAMAGE\b[^.]*)/i,
+  );
+  if (addsMatch) return addsMatch[0].replace(/[.,]+$/, "").trim();
+
+  // Pattern: "...LEECH X% OF {TYPE} ATTACK DAMAGE AS {RESOURCE}"
+  const leechMatch = line.match(
+    /LEECH\s+[\d.%()\-]+\s+OF\s+\w+\s+ATTACK\s+DAMAGE\s+AS\s+\w+/i,
+  );
+  if (leechMatch) return leechMatch[0].trim();
+
+  // Pattern: "...GAIN X {RESOURCE} PER ENEMY HIT..."
+  const gainMatch = line.match(
+    /GAIN\s+\d+[\d.()\-]*\s+\w+\s+PER\s+ENEMY\s+HIT\b[^.]*/i,
+  );
+  if (gainMatch) return gainMatch[0].trim();
+
+  // Pattern: embedded "+X(range) TO MAXIMUM/FIRE/COLD/LIGHTNING..."
+  // Only when line also contains map mod noise
+  if (NOISE_RE.test(line) || MAP_MOD_RE.test(line)) {
+    const modMatch = line.match(
+      /[+-]\d+[\d.()\-]*\s+TO\s+(MAXIMUM|FIRE|COLD|LIGHTNING|CHAOS|STRENGTH|DEXTERITY|INTELLIGENCE)\b[^.]*/i,
+    );
+    if (modMatch) return modMatch[0].trim();
+  }
+
+  return null;
+}
+
+/**
+ * Check if a line is game UI / map noise that should never be used as item name/mod.
+ * Handles truncated words (AVF cuts edges) and diacritics.
+ */
+function isNoiseLine(line: string): boolean {
+  const normalized = line.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (NOISE_RE.test(normalized) || MAP_MOD_RE.test(normalized)) return true;
+  if (STAT_LINE_RE.test(line)) return true;
+  // UI labels (may be truncated by AVF crop: "NVENTORY", "OSMETICS")
+  if (/\b(N?VENTORY|OSMETICS?|COSMETICS?|INSPECT)\b/i.test(normalized)) return true;
+  // Game info (may have diacritics or partial text)
+  if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|GOLD|WOODLAND|HIDEOUT|TOWN)\b/i.test(normalized)) return true;
+  if (/^\d+\s*(FPS|FBS|г8S)?\s*$/i.test(line)) return true; // FPS counter
+  if (/^(MORE THAN \d+|FATE OF)/i.test(normalized)) return true;
+  return false;
+}
+
 // Set of known class names (uppercase) for simple format detection
 const CLASS_NAMES = new Set(Object.keys(CLASS_MAP));
 
@@ -187,11 +243,11 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
 
   // Name and base type: the 2 lines before the class line
   const priorLines: string[] = [];
-  for (let i = classIdx - 1; i >= Math.max(0, classIdx - 5); i--) {
+  for (let i = classIdx - 1; i >= Math.max(0, classIdx - 8); i--) {
     const line = lines[i].trim();
     if (line.length < 3) continue;
     if (/^[^A-Za-z]*$/.test(line)) continue;
-    if (/^(MONSTERS|AREA|RARE|CONTAINS)\s/i.test(line)) continue;
+    if (isNoiseLine(line)) continue;
     priorLines.unshift(line);
     if (priorLines.length >= 2) break;
   }
@@ -296,15 +352,12 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
   // But there might be junk from the game background before that
   // Look for the last 2 "clean" lines before anchor
   const priorLines: string[] = [];
-  for (let i = anchorIdx - 1; i >= Math.max(0, anchorIdx - 5); i--) {
+  for (let i = anchorIdx - 1; i >= Math.max(0, anchorIdx - 8); i--) {
     const line = lines[i].trim();
-    // Skip lines that look like noise (very short, mostly punctuation, etc.)
     if (line.length < 3) continue;
     if (/^[^A-Za-z]*$/.test(line)) continue;
-    // Skip lines that match known patterns (stat lines, map mods, etc.)
-    if (STAT_LINE_RE.test(line)) continue;
+    if (isNoiseLine(line)) continue;
     if (/^\d+%?\s+(INCREASED|REDUCED|MORE|LESS)\s/i.test(line)) continue;
-    if (/^(MONSTERS|AREA|RARE MONSTERS|CONTAINS)\s/i.test(line)) continue;
     priorLines.unshift(line);
     if (priorLines.length >= 2) break;
   }
@@ -322,8 +375,11 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     let line = lines[i].trim();
     if (line.length < 3) continue;
 
-    // OCR often merges map mods and item mods on one line, e.g.:
+    // OCR (especially AVF) often merges map mods and item mods on one line, e.g.:
     // "150% INCREASED EXPEDITION RADIUS PREFIX +85(85-99) TO MAXIMUM LIFE"
+    // "4 CONTAINS 7 ADDITIONAL PACKS... ADDS 13(11-13) TO 18(18-21) COLD DAMAGE"
+    // "MONSTERS DEAL 16% OF DAMAGE... LEECH 7.18% OF PHYSICAL ATTACK DAMAGE AS LIFE"
+
     // Extract PREFIX/SUFFIX/IMPLICIT from anywhere in the line first
     const embeddedPrefix = line.match(/\bPREFIX\s+(.+)/i);
     const embeddedSuffix = line.match(/\bSUFFIX\s+(.+)/i);
@@ -338,6 +394,15 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     }
     if (embeddedImplicit) {
       result.implicitMods.push(stripTierRanges(embeddedImplicit[1].trim()));
+      continue;
+    }
+
+    // Try to extract item mod from merged map+item lines.
+    // AVF merges text at same Y height, so map mod on left + item mod on right
+    // become one string. Look for known item mod patterns embedded in noise.
+    const extractedMod = extractEmbeddedMod(line);
+    if (extractedMod) {
+      result.explicitMods.push(stripTierRanges(extractedMod));
       continue;
     }
 
@@ -377,9 +442,18 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       continue;
     }
 
+    // "GAIN X resource PER ENEMY HIT" / "ADDS X TO Y damage" as standalone lines
+    if (/^(GAIN|ADDS)\s+\d/i.test(line)) {
+      result.explicitMods.push(stripTierRanges(line));
+      continue;
+    }
+
+    // Skip tier markers (T1-T10, standalone)
+    if (/^T\d{1,2}$/i.test(line)) continue;
+
     // Skip map mods and other noise
     if (/^(MONSTERS|AREA|RARE MONSTERS|CONTAINS)\s/i.test(line)) continue;
-    if (/^(INVENTORY|COSMETICS)\s*$/i.test(line)) continue;
+    if (/^(INVENTORY|COSMETICS|INSPECT)\s*$/i.test(line)) continue;
   }
 
   return result;
@@ -408,9 +482,16 @@ export function reconstructClipboard(ocrText: string): string | null {
 
   const parsed = parseOcrLines(lines);
 
-  if (!parsed.itemClass || !parsed.baseType) {
-    console.log("[GFN] Reconstruct failed: no item class or base type found");
+  if (!parsed.itemClass) {
+    console.log("[GFN] Reconstruct failed: no item class found");
     return null;
+  }
+
+  // If name/baseType missing (e.g. OCR didn't capture top of tooltip),
+  // use item class as fallback — price check can still work on mods
+  if (!parsed.baseType) {
+    parsed.baseType = parsed.itemClass;
+    console.log(`[GFN] No base type found, using item class: ${parsed.itemClass}`);
   }
 
   const rarity = detectRarity(parsed);

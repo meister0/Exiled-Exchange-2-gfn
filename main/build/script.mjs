@@ -25,6 +25,15 @@ const visionBuild = await esbuild.build({
   outfile: 'dist/vision.js'
 })
 
+// Compile Apple Vision Framework OCR helper (macOS only)
+if (process.platform === 'darwin') {
+  console.info('Compiling avf-ocr Swift helper...')
+  child_process.execSync('swiftc -O -o dist/avf-ocr src/vision/avf-ocr.swift', {
+    stdio: 'inherit',
+    cwd: process.cwd()
+  })
+}
+
 const mainContext = await esbuild.context({
   entryPoints: ['src/main.ts'],
   bundle: true,
