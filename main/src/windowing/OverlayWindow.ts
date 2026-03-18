@@ -12,8 +12,10 @@ export class OverlayWindow {
   public isInteractable = false;
   public wasUsedRecently = true;
   private window?: BrowserWindow;
+  private gfnWindow?: BrowserWindow;
   private overlayKey: string = "Shift + Space";
   private isOverlayKeyUsed = false;
+  private appUrl = "";
 
   constructor(
     private server: ServerEvents,
@@ -68,20 +70,36 @@ export class OverlayWindow {
   }
 
   loadAppPage(port: number) {
-    const url =
+    this.appUrl =
       process.env.VITE_DEV_SERVER_URL || `http://localhost:${port}/index.html`;
 
     if (!this.window) {
-      shell.openExternal(url);
+      shell.openExternal(this.appUrl);
       return;
     }
 
     if (process.env.VITE_DEV_SERVER_URL) {
-      this.window.loadURL(url);
+      this.window.loadURL(this.appUrl);
       this.window.webContents.openDevTools({ mode: "detach", activate: false });
     } else {
-      this.window.loadURL(url);
+      this.window.loadURL(this.appUrl);
     }
+  }
+
+  /**
+   * Pre-create the GFN overlay window (hidden).
+   * Must be called early so the window is already on all workspaces
+   * when we need to show it — avoids macOS Space-switch.
+   */
+  /**
+   * Show GFN overlay — reuse the existing overlay window but force-show it
+   * as always-on-top on the current Space (works with fullscreen GFN).
+   */
+  /**
+   * Show overlay for GFN price check — just use normal assertOverlayActive.
+   */
+  showGfnOverlay(_position: { x: number; y: number }) {
+    this.assertOverlayActive();
   }
 
   assertOverlayActive = () => {
@@ -151,6 +169,14 @@ export class OverlayWindow {
   };
 
   private handleOverlayAttached = (hasAccess?: boolean) => {
+    // When attached to GFN window, enable always-on-top for fullscreen Spaces
+    if (this.window) {
+      this.window.setAlwaysOnTop(true, "screen-saver");
+      this.window.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+      });
+    }
+
     if (hasAccess === false) {
       this.logger.write(
         "error [Overlay] PoE2 is running with administrator rights",

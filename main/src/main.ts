@@ -103,6 +103,7 @@ let tray: AppTray;
           "CLIENT->MAIN::update-host-config",
           (cfg) => {
             overlay.updateOpts(cfg.overlayKey, cfg.windowTitle);
+            shortcuts.isGfnMode = /geforce|nvidia/i.test(cfg.windowTitle);
             shortcuts.updateActions(
               cfg.shortcuts,
               cfg.stashScroll,
@@ -119,21 +120,6 @@ let tray: AppTray;
         uIOhook.start();
         console.log("uIOhook started");
 
-        // Register GFN hotkey immediately (doesn't need game window or renderer config)
-        console.log("[GFN] Registering Alt+D as GFN price check hotkey...");
-        shortcuts.updateActions(
-          [
-            {
-              shortcut: "Alt + D",
-              action: { type: "gfn-price-check", target: "price-check" },
-            },
-          ],
-          false,
-          true, // logKeys=true for debugging
-          false,
-          "en",
-        );
-        console.log("[GFN] updateActions called, hotkey should be registered");
 
         const port = await startServer(appUpdater, logger);
         // TODO: move up (currently crashes)
