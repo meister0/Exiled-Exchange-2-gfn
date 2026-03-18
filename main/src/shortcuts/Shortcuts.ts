@@ -9,6 +9,7 @@ import { typeInChat, stashSearch } from "./text-box";
 import { WidgetAreaTracker } from "../windowing/WidgetAreaTracker";
 import { HostClipboard } from "./HostClipboard";
 import { OcrWorker } from "../vision/link-main";
+import { captureScreenAroundCursor } from "../vision/ScreenCapture";
 import type { ShortcutAction } from "../../../ipc/types";
 import type { Logger } from "../RemoteLogger";
 import type { OverlayWindow } from "../windowing/OverlayWindow";
@@ -23,6 +24,7 @@ const UiohookToName = Object.fromEntries(
 
 export class Shortcuts {
   private actions: ShortcutAction[] = [];
+  private gfnActions: ShortcutAction[] = [];
   private stashScroll = false;
   private logKeys = false;
   private areaTracker: WidgetAreaTracker;
@@ -164,11 +166,27 @@ export class Shortcuts {
         allShortcuts.add(action.shortcut);
       }
     }
-    this.actions = actions.filter(
+    const validActions = actions.filter(
       (action) =>
         !duplicates.has(action.shortcut) ||
         action.action.type === "toggle-overlay",
     );
+
+    // GFN actions are always-on, not gated by game window focus
+    const newGfnActions = validActions.filter(
+      (a) => a.action.type === "gfn-price-check",
+    );
+    this.actions = validActions.filter(
+      (a) => a.action.type !== "gfn-price-check",
+    );
+
+    // Only update GFN shortcuts if new config actually contains them,
+    // otherwise keep existing ones (prevents renderer overwriting startup defaults)
+    if (newGfnActions.length > 0 || this.gfnActions.length === 0) {
+      this.unregisterGfn();
+      this.gfnActions = newGfnActions;
+      this.registerGfn();
+    }
   }
 
   private register() {
@@ -282,7 +300,93 @@ export class Shortcuts {
   }
 
   private unregister() {
-    globalShortcut.unregisterAll();
+    // Unregister game-window shortcuts, but keep GFN ones alive
+    for (const entry of this.actions) {
+      globalShortcut.unregister(shortcutToElectron(entry.shortcut));
+    }
+  }
+
+  private registerGfn() {
+    console.log(`[GFN] registerGfn called, ${this.gfnActions.length} actions`);
+    for (const entry of this.gfnActions) {
+      const electronShortcut = shortcutToElectron(entry.shortcut);
+      console.log(`[GFN] Registering: "${entry.shortcut}" → "${electronShortcut}"`);
+      const isOk = globalShortcut.register(
+        electronShortcut,
+        () => {
+          console.log(`[GFN] Hotkey pressed! Action: ${entry.action.type}`);
+          if (this.logKeys) {
+            this.logger.write(
+              `debug [Shortcuts] Action type: ${entry.action.type}`,
+            );
+          }
+
+          if (entry.action.type === "gfn-price-check") {
+            const { action } = entry;
+            const pressPosition = screen.getCursorScreenPoint();
+            console.log(`[GFN] Capturing screen BEFORE releasing keys (Alt held for advanced mods)`);
+
+            // Capture screen FIRST while Alt is still held (shows advanced mod descriptions)
+            captureScreenAroundCursor()
+              .then((capture) => {
+                // Release keys AFTER screenshot captured
+                entry.shortcut
+                  .split(" + ")
+                  .reverse()
+                  .forEach((key) => {
+                    uIOhook.keyToggle(UiohookKey[key as UiohookKeyT], "up");
+                  });
+
+                console.log(`[GFN] Screen captured: ${capture.image.width}x${capture.image.height}`);
+                if (capture.image.width === 0 || capture.image.height === 0) {
+                  throw new Error("Empty screenshot (0x0) — macOS may need Screen Recording permission restart");
+                }
+                return this.ocrWorker.ocrGfnItem(capture.image, capture.cursorInCrop);
+              })
+              .then((result) => {
+                console.log(`[GFN] OCR done in ${Math.round(result.elapsed)}ms, confidence=${result.confidence}, text length=${result.text.length}`);
+                console.log(`[GFN] OCR raw text:\n${result.text.substring(0, 1500)}`);
+
+                const clipboardText = result.clipboard;
+                if (clipboardText) {
+                  this.areaTracker.removeListeners();
+                  this.server.sendEventTo("last-active", {
+                    name: "MAIN->CLIENT::item-text",
+                    payload: {
+                      target: action.target,
+                      clipboard: clipboardText,
+                      position: pressPosition,
+                      focusOverlay: true,
+                    },
+                  });
+                  if (this.overlay.wasUsedRecently) {
+                    this.overlay.assertOverlayActive();
+                  }
+                } else {
+                  console.log("[GFN] Could not reconstruct clipboard from OCR text");
+                }
+              })
+              .catch((err) => {
+                const msg = err instanceof Error ? err.stack || err.message : String(err);
+                console.error(`[GFN] OCR failed:`, msg);
+              });
+          }
+        },
+      );
+
+      if (!isOk) {
+        console.error(`[GFN] FAILED to register shortcut "${entry.shortcut}"`);
+        this.logger.write(
+          `error [Shortcuts] Failed to register GFN shortcut "${entry.shortcut}".`,
+        );
+      }
+    }
+  }
+
+  private unregisterGfn() {
+    for (const entry of this.gfnActions) {
+      globalShortcut.unregister(shortcutToElectron(entry.shortcut));
+    }
   }
 }
 

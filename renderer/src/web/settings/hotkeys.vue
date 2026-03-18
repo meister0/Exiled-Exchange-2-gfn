@@ -47,6 +47,10 @@
           }}</label>
           <hotkey-input v-model="priceCheckHotkeyLocked" class="w-48" />
         </div>
+        <div class="flex gap-x-2">
+          <label class="flex-1 text-gray-500">GFN Price Check (OCR)</label>
+          <hotkey-input v-model="gfnPriceCheckKey" class="w-48" />
+        </div>
       </div>
     </div>
     <div class="mb-4 flex">
@@ -121,6 +125,10 @@ export default defineComponent({
       priceCheckHotkeyLocked: configModelValue(
         () => findWidget<PriceCheckWidget>("price-check", props.config)!,
         "hotkeyLocked",
+      ),
+      gfnPriceCheckKey: configModelValue(
+        () => findWidget<PriceCheckWidget>("price-check", props.config)!,
+        "gfnPriceCheckKey",
       ),
     };
   },

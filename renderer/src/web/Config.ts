@@ -620,6 +620,14 @@ function upgradeConfig(_config: Config): Config {
 
     config.configVersion = 29;
   }
+  if (config.configVersion < 30) {
+    const priceCheck = config.widgets.find(
+      (w) => w.wmType === "price-check",
+    ) as widget.PriceCheckWidget;
+    priceCheck.gfnPriceCheckKey = null;
+
+    config.configVersion = 30;
+  }
   return config as unknown as Config;
 }
 
@@ -639,6 +647,12 @@ function getConfigForHost(): HostConfig {
     actions.push({
       shortcut: priceCheck.hotkeyLocked,
       action: { type: "copy-item", target: "price-check", focusOverlay: true },
+    });
+  }
+  if (priceCheck.gfnPriceCheckKey) {
+    actions.push({
+      shortcut: priceCheck.gfnPriceCheckKey,
+      action: { type: "gfn-price-check", target: "price-check" },
     });
   }
   actions.push({

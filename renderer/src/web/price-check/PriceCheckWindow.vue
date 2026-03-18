@@ -218,6 +218,7 @@ export default defineComponent({
         hotkey: "D",
         hotkeyHold: "Ctrl",
         hotkeyLocked: "Ctrl + Alt + D",
+        gfnPriceCheckKey: null,
         showSeller: false,
         searchStatRange: 10,
         showCursor: true,

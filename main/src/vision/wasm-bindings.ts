@@ -12,8 +12,7 @@ const langMap = new Map([
 ]);
 
 export async function init(binDir: string) {
-  if (process.platform !== "win32") {
-    // so far only tested on Windows with BGRA images
+  if (process.platform !== "win32" && process.platform !== "darwin") {
     throw new Error("Unsupported platform");
   }
 

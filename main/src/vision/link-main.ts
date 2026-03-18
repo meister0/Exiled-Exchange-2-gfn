@@ -41,4 +41,15 @@ export class OcrWorker {
     );
     return result;
   }
+
+  async ocrGfnItem(
+    image: ImageData,
+    cursorInCrop: { x: number; y: number },
+  ) {
+    const result = await this.api.ocrGfnItem(
+      Comlink.transfer(image, [image.data.buffer]),
+      cursorInCrop,
+    );
+    return result;
+  }
 }

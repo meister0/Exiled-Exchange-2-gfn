@@ -25,6 +25,10 @@ export interface ShortcutAction {
         target: "heist-gems";
       }
     | {
+        type: "gfn-price-check";
+        target: string;
+      }
+    | {
         type: "trigger-event";
         target: string;
       }

@@ -39,6 +39,7 @@ export interface PriceCheckWidget extends Widget {
   hotkey: string | null;
   hotkeyHold: string;
   hotkeyLocked: string | null;
+  gfnPriceCheckKey: string | null;
   showSeller: false | "account" | "ign";
   searchStatRange: number;
   showRateLimitState: boolean;
