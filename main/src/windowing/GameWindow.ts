@@ -1,5 +1,5 @@
 import type { BrowserWindow } from "electron";
-import { screen } from "electron";
+import { app, screen } from "electron";
 import { execFile } from "child_process";
 import { EventEmitter } from "events";
 import { OverlayController, AttachEvent } from "electron-overlay-window";
@@ -91,11 +91,16 @@ export class GameWindow extends EventEmitter {
 
     console.log(`[GFN] Starting frontmost app polling for "${this._windowTitle}"`);
 
+    // REQUIRED since macOS 10.14: hide dock icon for overlay to show
+    // over fullscreen apps. Without this, visibleOnFullScreen is ignored.
+    app.dock.hide();
+
     // Setup overlay window for fullscreen Spaces
     if (window) {
       window.setAlwaysOnTop(true, "screen-saver");
       window.setVisibleOnAllWorkspaces(true, {
         visibleOnFullScreen: true,
+        skipTransformProcessType: true, // we already hid the dock
       });
       const display = screen.getPrimaryDisplay();
       window.setBounds({

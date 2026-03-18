@@ -111,8 +111,11 @@ export class OverlayWindow {
           name: "MAIN->OVERLAY::focus-change",
           payload: { game: false, overlay: true, usingHotkey: true },
         });
-        this.window.show();
+        this.window.showInactive();
+        this.window.moveTop();
+        this.window.setAlwaysOnTop(true, "screen-saver");
         this.window.focus();
+        console.log("[GFN] Overlay shown: visible=" + this.window.isVisible() + " bounds=" + JSON.stringify(this.window.getBounds()));
       } else {
         OverlayController.activateOverlay();
       }
