@@ -128,7 +128,13 @@ function extractEmbeddedMod(line: string): string | null {
   const addsMatch = line.match(
     /ADDS\s+\d+[\d.()\-]*\s+TO\s+\d+[\d.()\-]*\s+\w+[\s,.]*(DAMAGE\b[^.]*)/i,
   );
-  if (addsMatch) return addsMatch[0].replace(/[.,]+$/, "").trim();
+  if (addsMatch) {
+    // Clean: remove stray commas/periods, fix "COLD, DAMAGE" → "COLD DAMAGE"
+    return addsMatch[0]
+      .replace(/,\s*DAMAGE/i, " Damage")
+      .replace(/[.,]+$/, "")
+      .trim();
+  }
 
   // Pattern: "...LEECH X% OF {TYPE} ATTACK DAMAGE AS {RESOURCE}"
   const leechMatch = line.match(
@@ -531,14 +537,26 @@ export function reconstructClipboard(ocrText: string): string | null {
   header.push(parsed.baseType);
   sections.push(header.join("\n"));
 
-  // Section 2: Stats (if any)
+  // Section 2: Stats — convert "EVASION RATING: 44" → "Evasion Rating: 44"
   if (parsed.stats.length > 0) {
-    sections.push(parsed.stats.join("\n"));
+    sections.push(
+      parsed.stats
+        .map((s) => {
+          const [label, ...rest] = s.split(":");
+          return toTitleCase(label.trim()) + ":" + rest.join(":");
+        })
+        .join("\n"),
+    );
   }
 
-  // Section 3: Requirements
+  // Section 3: Requirements — "LEVEL 48, 32 DEX, 32 INT" → "Level 48, 32 Dex, 32 Int"
   if (parsed.requirements) {
-    sections.push(`Requires: ${parsed.requirements}`);
+    const req = parsed.requirements
+      .replace(/\bLEVEL\b/gi, "Level")
+      .replace(/\bSTR\b/gi, "Str")
+      .replace(/\bDEX\b/gi, "Dex")
+      .replace(/\bINT\b/gi, "Int");
+    sections.push(`Requires: ${req}`);
   }
 
   // Section 4: Item Level
