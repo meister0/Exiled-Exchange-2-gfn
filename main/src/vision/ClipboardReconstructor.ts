@@ -567,9 +567,10 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     // 6. PREFIX/SUFFIX/IMPLICIT markers → extract the mod text after.
     // OCR may merge noise before the marker: "Japan Re IMPLICIT +8% TO ALL..."
     // Strip any non-mod prefix: find first +/- or digit after marker.
-    const embeddedPrefix = line.match(/\bPREFIX\s+(.+)/i);
-    const embeddedSuffix = line.match(/\bSUFFIX\s+(.+)/i);
-    const embeddedImplicit = line.match(/\bIMPLICIT\s+(.+)/i);
+    // OCR may merge marker with text: "IMPLICITADDS..." or "PREFIX+85..."
+    const embeddedPrefix = line.match(/\bPREFIX\s*(.+)/i);
+    const embeddedSuffix = line.match(/\bSUFFIX\s*(.+)/i);
+    const embeddedImplicit = line.match(/\bIMPLICIT\s*(.+)/i);
     if (embeddedPrefix) {
       const mod = normalizeMarkerMod(embeddedPrefix[1]);
       if (mod) { result.explicitMods.push(mod); continue; }
@@ -579,8 +580,18 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       if (mod) { result.explicitMods.push(mod); continue; }
     }
     if (embeddedImplicit) {
-      const mod = normalizeMarkerMod(embeddedImplicit[1]);
-      if (mod) { result.implicitMods.push(mod); continue; }
+      let mod = normalizeMarkerMod(embeddedImplicit[1]);
+      if (mod) {
+        // Tablet implicits are multi-line: "Adds X to a Map\n# uses remaining"
+        // Check next line for "N uses remaining" and merge
+        const nextLine = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
+        if (/\d+\s+uses?\s+remaining/i.test(nextLine)) {
+          mod = mod + "\n" + stripTierRanges(nextLine);
+          i++; // skip next line
+        }
+        result.implicitMods.push(mod);
+        continue;
+      }
       continue;
     }
 
