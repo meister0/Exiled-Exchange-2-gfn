@@ -507,16 +507,22 @@ export class Shortcuts {
   /** Register globalShortcut no-ops so Carbon HotKey API consumes key events before GFN sees them. */
   private registerGfnSuppressors() {
     this.unregister(); // clear any previous registrations
+    let count = 0;
     for (const entry of this.actions) {
+      // Skip Alt-containing shortcuts: registering them as globalShortcut
+      // causes macOS to delay plain Alt events (system waits for combo completion).
+      // This breaks Alt-to-show-advanced-tooltips in PoE2.
+      if (/\bAlt\b/i.test(entry.shortcut)) continue;
+
       const electronKey = shortcutToElectron(entry.shortcut);
-      const ok = globalShortcut.register(electronKey, () => {
-        // no-op: uIOhook handles the action, this just suppresses the event
-      });
+      const ok = globalShortcut.register(electronKey, () => {});
       if (!ok) {
         console.log(`[GFN] Failed to register suppressor for "${entry.shortcut}"`);
+      } else {
+        count++;
       }
     }
-    console.log(`[GFN] Registered ${this.actions.length} key suppressors`);
+    console.log(`[GFN] Registered ${count} key suppressors (skipped Alt combos)`);
   }
 }
 
