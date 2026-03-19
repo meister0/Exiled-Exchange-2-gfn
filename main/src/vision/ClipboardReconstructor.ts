@@ -646,12 +646,18 @@ export function reconstructClipboard(ocrText: string): string | null {
   const rarity = detectRarity(parsed);
   const sections: string[] = [];
 
-  // Section 1: Header
+  // Skip item types that crash the renderer parser
+  if (parsed.itemClass === "Tablet") {
+    console.log("[GFN] Skipping Tablet — renderer parser not fully supported");
+    return null;
+  }
+
+  // Section 1: Header — parser expects: Item Class, Rarity, [Name], BaseType
   const header = [`Item Class: ${parsed.itemClass}`, `Rarity: ${rarity}`];
   if (parsed.name && parsed.name !== parsed.baseType) {
     header.push(parsed.name);
   }
-  header.push(parsed.baseType);
+  header.push(parsed.baseType ?? parsed.name ?? parsed.itemClass);
   sections.push(header.join("\n"));
 
   // Section 2: Stats — use EXACT labels from renderer client_strings
