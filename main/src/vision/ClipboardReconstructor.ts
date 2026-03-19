@@ -647,8 +647,20 @@ export function reconstructClipboard(ocrText: string): string | null {
   const sections: string[] = [];
 
   // Skip item types that crash the renderer parser
-  if (parsed.itemClass === "Tablet") {
-    console.log("[GFN] Skipping Tablet — renderer parser not fully supported");
+  // Whitelist: only send item classes the renderer parser can handle.
+  // Unknown/OCR-corrupted classes crash the Vue price check component.
+  const SUPPORTED_CLASSES = new Set([
+    "Amulets", "Rings", "Belts", "Quivers", "Gloves", "Helmets", "Boots",
+    "Body Armours", "Shields", "Foci", "Bows", "Crossbows", "Wands",
+    "Sceptres", "Staves", "Two Hand Maces", "One Hand Maces",
+    "Two Hand Swords", "One Hand Swords", "Flails", "Spears",
+    "Quarterstaves", "Daggers", "Claws", "Traps", "Flasks", "Jewels",
+    "Charms", "Uncut Skill Gems", "Uncut Support Gems", "Uncut Spirit Gems",
+    "Waystone",
+    // "Tablet" — crashes renderer, skip until fixed
+  ]);
+  if (!parsed.itemClass || !SUPPORTED_CLASSES.has(parsed.itemClass)) {
+    console.log(`[GFN] Skipping unsupported item class: "${parsed.itemClass}"`);
     return null;
   }
 
