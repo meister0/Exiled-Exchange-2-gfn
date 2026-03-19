@@ -221,14 +221,24 @@ function isNoiseLine(line: string): boolean {
  * "Reali+8(7-10)% TO ALL..." → "+8% to all Elemental Resistances"
  */
 function normalizeMarkerMod(raw: string): string {
-  let trimmed = raw.trim();
-  // Strip alphabetic noise prefix, but NOT for multi-line mods (tablet implicits)
-  if (!trimmed.includes("\n") && !/^[+-\d]/.test(trimmed)) {
-    trimmed = trimmed.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
-  }
+  const trimmed = raw.trim();
+  // Try full text first (mod might start with words: "Breaches in Map have 10%...")
   const stripped = stripTierRanges(trimmed);
   const fixed = fuzzyFixWords(stripped);
-  return matchStatLine(fixed)?.text ?? fixed;
+  const fullMatch = matchStatLine(fixed);
+  if (fullMatch) return fullMatch.text;
+
+  // If no match and single-line, strip alphabetic prefix and retry
+  if (!trimmed.includes("\n") && !/^[+-\d]/.test(stripped)) {
+    const noPrefix = stripped.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
+    if (noPrefix !== stripped) {
+      const noPrefixFixed = fuzzyFixWords(noPrefix);
+      const strippedMatch = matchStatLine(noPrefixFixed);
+      if (strippedMatch) return strippedMatch.text;
+    }
+  }
+
+  return fixed;
 }
 
 /**
