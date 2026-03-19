@@ -568,9 +568,10 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     // OCR may merge noise before the marker: "Japan Re IMPLICIT +8% TO ALL..."
     // Strip any non-mod prefix: find first +/- or digit after marker.
     // OCR may merge marker with text: "IMPLICITADDS..." or "PREFIX+85..."
-    const embeddedPrefix = line.match(/\bPREFIX\s*(.+)/i);
-    const embeddedSuffix = line.match(/\bSUFFIX\s*(.+)/i);
-    const embeddedImplicit = line.match(/\bIMPLICIT\s*(.+)/i);
+    // OCR may also corrupt markers: "IMPLCIT" (missing I), "PREFX" etc.
+    const embeddedPrefix = line.match(/\bPREF[I1]X\s*(.+)/i);
+    const embeddedSuffix = line.match(/\bSUFF[I1]X\s*(.+)/i);
+    const embeddedImplicit = line.match(/\bIMPL[I1]C[I1]T?\s*(.+)/i);
     if (embeddedPrefix) {
       const mod = normalizeMarkerMod(embeddedPrefix[1]);
       if (mod) { result.explicitMods.push(mod); continue; }

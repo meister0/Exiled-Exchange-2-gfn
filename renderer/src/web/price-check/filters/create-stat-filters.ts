@@ -313,7 +313,7 @@ export function calculatedStatToFilter(
   item: ParsedItem,
   disabled: boolean = true,
 ): StatFilter {
-  const { stat, sources, type } = calc;
+  const { stat, sources = [], type } = calc;
   let filter: StatFilter;
 
   const roll = statSourcesTotal(
