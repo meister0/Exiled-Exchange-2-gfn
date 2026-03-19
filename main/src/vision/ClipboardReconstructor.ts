@@ -838,7 +838,7 @@ export function reconstructClipboard(ocrText: string): string | null {
 
   // Section 5: Flask stats — ALL in one section so parseFlask() can consume it.
   // parseFlask() looks for "Currently has N Charges" → if found, consumes entire section.
-  if (parsed.flaskStats.length > 0) {
+  if (parsed.flaskStats.length > 0 || parsed.itemClass === "Flasks") {
     const chargesLine = parsed.flaskStats.find((s) => /^CURRENTLY HAS/i.test(s));
     const otherFlask = parsed.flaskStats.filter((s) =>
       !/^CURRENTLY HAS|^RIGHT CLICK|^WHILE IN BELT|^REFILL AT/i.test(s),
@@ -847,13 +847,11 @@ export function reconstructClipboard(ocrText: string): string | null {
     for (const s of otherFlask) {
       flaskLines.push(formatFlaskStat(s));
     }
-    if (chargesLine) {
-      const n = chargesLine.match(/\d+/)?.[0] ?? "0";
-      flaskLines.push(`Currently has ${n} Charges`);
-    }
-    if (flaskLines.length > 0) {
-      sections.push(flaskLines.join("\n"));
-    }
+    // Always include "Currently has N Charges" — parseFlask needs it to consume the section.
+    // If OCR missed it, add synthetic line with 0.
+    const n = chargesLine?.match(/\d+/)?.[0] ?? "0";
+    flaskLines.push(`Currently has ${n} Charges`);
+    sections.push(flaskLines.join("\n"));
   }
 
   // Section 6: Implicit mods — parser needs "{ Implicit Modifier }" marker
