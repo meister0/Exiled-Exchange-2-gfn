@@ -216,7 +216,7 @@ export default defineComponent({
         activateStockFilter: false,
         builtinBrowser: false,
         hotkey: "D",
-        hotkeyHold: "Ctrl",
+        hotkeyHold: "Alt",
         hotkeyLocked: "Ctrl + Alt + D",
         gfnPriceCheckKey: null,
         showSeller: false,

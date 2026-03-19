@@ -14,7 +14,7 @@ PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote 
 
 ## How it works
 
-1. Press hotkey (Ctrl+D by default) while hovering an item in GFN
+1. Press hotkey (Alt+D / Option+D by default) while hovering an item in GFN
 2. App takes a screenshot, runs Apple Vision OCR on the tooltip area
 3. Reconstructs clipboard-compatible text from OCR output
 4. Sends to the same price check pipeline as normal Ctrl+C
@@ -24,7 +24,7 @@ PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote 
 1. Clone and build (see Development below)
 2. Set Window Title to `NVIDIA GeForce NOW` in EE2 settings
 3. Grant Accessibility and Screen Recording permissions to Electron
-5. Hotkeys: **Ctrl+D** = price check, **Shift+Space** = toggle overlay, **Esc** = close overlay
+5. Hotkeys: **Alt+D (Option+D)** = price check, **Shift+Space** = toggle overlay, **Esc** = close overlay
 
 ## Limitations
 
