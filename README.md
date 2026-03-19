@@ -14,7 +14,7 @@ PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote 
 
 ## How it works
 
-1. Press hotkey (Alt+D by default) while hovering an item in GFN
+1. Press hotkey (Ctrl+D by default) while hovering an item in GFN
 2. App takes a screenshot, runs Apple Vision OCR on the tooltip area
 3. Reconstructs clipboard-compatible text from OCR output
 4. Sends to the same price check pipeline as normal Ctrl+C
