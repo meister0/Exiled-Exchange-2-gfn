@@ -529,11 +529,24 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
   }
 
   if (priorLines.length >= 2) {
-    result.name = toTitleCase(cleanName(priorLines[0]));
-    result.baseType = toTitleCase(cleanName(priorLines[1]));
+    // Validate: if "name" (farther from anchor) is a single short word
+    // and "baseType" (closer) contains the class keyword,
+    // then "name" is likely game world noise (NPC: "DORYANI", "ALVA")
+    const nameCandidate = priorLines[0].trim();
+    const baseCandidate = priorLines[1].trim();
+    const classUpper = (result.itemClass || "").toUpperCase().replace(/S$/, "");
+    const nameIsSingleWord = !nameCandidate.includes(" ") && nameCandidate.length < 15;
+    const baseHasClass = classUpper && baseCandidate.toUpperCase().includes(classUpper);
+    if (nameIsSingleWord && baseHasClass) {
+      result.baseType = toTitleCase(cleanName(baseCandidate));
+      result.name = result.baseType;
+    } else {
+      result.name = toTitleCase(cleanName(priorLines[0]));
+      result.baseType = toTitleCase(cleanName(priorLines[1]));
+    }
   } else if (priorLines.length === 1) {
     result.baseType = toTitleCase(cleanName(priorLines[0]));
-    result.name = result.baseType; // Normal/Currency items have same name
+    result.name = result.baseType;
   }
 
   // Work forwards from anchor: WHITELIST approach.
