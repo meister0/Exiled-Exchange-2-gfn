@@ -1,10 +1,10 @@
 import { desktopCapturer, screen } from "electron";
 import type { ImageData } from "./utils";
 
-// Send full screen to OCR — anchor-based clustering handles noise filtering.
-// Cropping loses tooltip content when cursor is near screen edges.
-const CROP_WIDTH = 0;  // 0 = full screen
-const CROP_HEIGHT = 0;
+// Large crop centered on cursor. Full screen picks up game UI (health bars etc.)
+// which confuses class detection ("Shield" label). Keep crop but large enough.
+const CROP_WIDTH = 1200;
+const CROP_HEIGHT = 1200;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 200;
 
@@ -58,14 +58,35 @@ export async function captureScreenAroundCursor(): Promise<{
 
   const cx = Math.round(cursorPoint.x * scaleFactor);
   const cy = Math.round(cursorPoint.y * scaleFactor);
+  const cropW = Math.round(CROP_WIDTH * scaleFactor);
+  const cropH = Math.round(CROP_HEIGHT * scaleFactor);
 
-  // Full screen — no crop. Anchor-based clustering handles noise.
+  // Offset crop upward — tooltip is usually above cursor
+  let x0 = cx - Math.round(cropW / 2);
+  let y0 = cy - Math.round(cropH * 0.7);
+  const effectiveCropW = Math.min(cropW, fullW);
+  const effectiveCropH = Math.min(cropH, fullH);
+  x0 = Math.max(0, Math.min(x0, fullW - effectiveCropW));
+  y0 = Math.max(0, Math.min(y0, fullH - effectiveCropH));
+  const actualW = Math.min(effectiveCropW, fullW - x0);
+  const actualH = Math.min(effectiveCropH, fullH - y0);
+
+  const cropped = new Uint8Array(actualW * actualH * 4);
+  for (let row = 0; row < actualH; row++) {
+    const srcOffset = ((y0 + row) * fullW + x0) * 4;
+    const dstOffset = row * actualW * 4;
+    cropped.set(bitmap.subarray(srcOffset, srcOffset + actualW * 4), dstOffset);
+  }
+
   return {
     image: {
-      width: fullW,
-      height: fullH,
-      data: new Uint8Array(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength),
+      width: actualW,
+      height: actualH,
+      data: cropped,
     },
-    cursorInCrop: { x: cx, y: cy },
+    cursorInCrop: {
+      x: cx - x0,
+      y: cy - y0,
+    },
   };
 }
