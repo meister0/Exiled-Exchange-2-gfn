@@ -788,12 +788,18 @@ export function reconstructClipboard(ocrText: string): string | null {
     }
   }
 
-  // Section 6: Implicit mods
+  // Section 6: Implicit mods — parser needs "{ Implicit Modifier }" marker
+  // to know these are implicit (affects trade ID lookup)
   if (parsed.implicitMods.length > 0) {
-    sections.push(parsed.implicitMods.join("\n"));
+    const implicitLines: string[] = [];
+    for (const mod of parsed.implicitMods) {
+      implicitLines.push("{ Implicit Modifier }");
+      implicitLines.push(mod);
+    }
+    sections.push(implicitLines.join("\n"));
   }
 
-  // Section 7: Explicit mods
+  // Section 7: Explicit mods — add markers when we have PREFIX/SUFFIX info
   if (parsed.explicitMods.length > 0) {
     sections.push(parsed.explicitMods.join("\n"));
   }
