@@ -108,7 +108,7 @@ function stripTierRanges(text: string): string {
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")     // strip diacritics (TỌ→TO)
     .replace(/^[$#@!]+/, "")                               // strip leading junk chars
-    .replace(/[!€]+$/g, "")                                // strip trailing junk
+    .replace(/[!€.,;:]+$/g, "")                             // strip trailing junk (OCR: "ATTACKS." → "ATTACKS")
     .trim();
 }
 
