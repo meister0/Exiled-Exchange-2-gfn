@@ -567,8 +567,28 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     // 6. PREFIX/SUFFIX/IMPLICIT markers → extract the mod text after.
     // OCR may merge noise before the marker: "Japan Re IMPLICIT +8% TO ALL..."
     // Strip any non-mod prefix: find first +/- or digit after marker.
-    // OCR may merge marker with text: "IMPLICITADDS..." or "PREFIX+85..."
-    // OCR may also corrupt markers: "IMPLCIT" (missing I), "PREFX" etc.
+    // Handle PREFIX/SUFFIX/IMPLICIT — can be:
+    // a) Merged with mod: "IMPLICITADDS..." → extract mod after marker
+    // b) Standalone marker: "IMPLICIT" → next line is the mod
+    // c) OCR corrupted: "IMPLCIT", "PREFX"
+    const markerOnly = /^(IMPL[I1]C[I1]T?|PREF[I1]X|SUFF[I1]X)$/i.test(line);
+    if (markerOnly && i + 1 < lines.length) {
+      const markerType = /IMPL/i.test(line) ? "implicit" : "explicit";
+      let modLine = fuzzyFixWords(lines[i + 1].trim());
+      i++;
+      // Merge multi-line mods: "Adds X to a Map" + "N uses remaining"
+      const nextNext = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
+      if (/\d+\s+uses?\s+remaining/i.test(nextNext)) {
+        modLine = modLine + "\n" + stripTierRanges(nextNext);
+        i++;
+      }
+      const mod = normalizeMarkerMod(modLine);
+      console.log(`[GFN-OCR] standalone ${line} marker → "${mod}"`);
+      if (mod) {
+        (markerType === "implicit" ? result.implicitMods : result.explicitMods).push(mod);
+      }
+      continue;
+    }
     const embeddedPrefix = line.match(/\bPREF[I1]X\s*(.+)/i);
     const embeddedSuffix = line.match(/\bSUFF[I1]X\s*(.+)/i);
     const embeddedImplicit = line.match(/\bIMPL[I1]C[I1]T?\s*(.+)/i);
