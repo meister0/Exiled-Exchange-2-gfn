@@ -20,6 +20,9 @@ import { Host } from "./web/background/IPC";
 
   const app = createApp(App);
   app.use(i18nPlugin);
+  app.config.errorHandler = (err, _vm, info) => {
+    console.error(`[Vue Error] ${info}:`, err);
+  };
   app.mount("#app");
   if (import.meta.env.DEV) {
     app.config.performance = true;
