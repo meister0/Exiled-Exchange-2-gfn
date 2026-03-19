@@ -124,45 +124,88 @@ export function matchStatLine(ocrLine: string): StatMatchResult | null {
   return null;
 }
 
+// OCR-specific character substitutions (applied before dictionary lookup)
+const OCR_CHAR_MAP: Record<string, string> = {
+  "!": "i", "$": "s", "0": "o", "§": "s",
+  "|": "l", "¡": "i", "¢": "c",
+};
+
+function ocrNormalize(word: string): string {
+  let result = "";
+  for (const ch of word) {
+    result += OCR_CHAR_MAP[ch] ?? ch;
+  }
+  return result;
+}
+
+/**
+ * Check if `needle` chars appear in `haystack` in order (subsequence).
+ * Returns ratio of matched chars (0-1).
+ * "gnite" in "ignite" → 5/6 = 0.83
+ */
+function subsequenceRatio(needle: string, haystack: string): number {
+  let ni = 0;
+  for (let hi = 0; hi < haystack.length && ni < needle.length; hi++) {
+    if (needle[ni] === haystack[hi]) ni++;
+  }
+  return ni / Math.max(needle.length, haystack.length);
+}
+
 /**
  * Fix OCR typos by matching each word against the known dictionary.
- * Uses Levenshtein distance — if a word is within 2 edits of a known word,
- * replace it with the canonical form.
- *
- * "STRENCTH" → "Strength", "LGNIT" → "Ignite", "AITACKS" → "Attacks"
+ * Pipeline: OCR char normalize → exact → Levenshtein → subsequence.
  */
 export function fuzzyFixWords(text: string): string {
   if (!wordDict) return text;
 
-  return text.replace(/[A-Za-z]{3,}/g, (word) => {
-    const lower = word.toLowerCase();
+  return text.replace(/[A-Za-z!$|]{3,}/g, (word) => {
+    // Step 1: OCR character substitution
+    const normalized = ocrNormalize(word.toLowerCase());
 
-    // Exact match — use canonical casing
-    const exact = wordDict!.get(lower);
+    // Step 2: Exact match (after OCR normalize)
+    const exact = wordDict!.get(normalized);
     if (exact) {
       return word === word.toUpperCase() ? exact.toUpperCase() : exact;
     }
 
-    // Fuzzy match only for 4+ char words (3-char words have too many false positives)
-    if (word.length < 4) return word;
+    // Step 3: Fuzzy match only for 4+ char words
+    if (normalized.length < 4) return word;
 
+    // Step 3a: Levenshtein distance ≤ 2
     let bestWord: string | null = null;
-    let bestDist = 3; // max allowed distance
+    let bestDist = 3;
 
     for (const [dictLower, dictCanon] of wordDict!) {
-      // Quick length filter — edit distance can't be less than length difference
-      if (Math.abs(dictLower.length - lower.length) >= bestDist) continue;
-
-      const dist = levenshtein(lower, dictLower);
+      if (Math.abs(dictLower.length - normalized.length) >= bestDist) continue;
+      const dist = levenshtein(normalized, dictLower);
       if (dist < bestDist) {
         bestDist = dist;
         bestWord = dictCanon;
-        if (dist === 1) break; // good enough
+        if (dist === 1) break;
       }
     }
 
     if (bestWord) {
       return word === word.toUpperCase() ? bestWord.toUpperCase() : bestWord;
+    }
+
+    // Step 3b: Subsequence matching (80%+ chars in order)
+    // Catches truncated/shifted words: "GNITE" → "Ignite", "RATINC" → "Rating"
+    let bestSubWord: string | null = null;
+    let bestRatio = 0.8; // minimum 80% match
+
+    for (const [dictLower, dictCanon] of wordDict!) {
+      if (Math.abs(dictLower.length - normalized.length) > 2) continue;
+      const ratio = subsequenceRatio(normalized, dictLower);
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        bestSubWord = dictCanon;
+        if (ratio > 0.95) break;
+      }
+    }
+
+    if (bestSubWord) {
+      return word === word.toUpperCase() ? bestSubWord.toUpperCase() : bestSubWord;
     }
 
     return word;

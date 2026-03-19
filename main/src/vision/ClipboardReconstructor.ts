@@ -103,12 +103,12 @@ function stripTierRanges(text: string): string {
     .replace(/(\d)['`''](\d)/g, "$1-$2")                 // OCR reads - as apostrophe: "26'37" → "26-37"
     .replace(/(\d),(\d)/g, "$1.$2")                      // OCR decimal comma: "1,65" → "1.65" (list "32, 35" has space → no match)
     .replace(/([A-Za-z])[.,]\s+([A-Za-z])/g, "$1 $2")   // OCR stray punctuation: "COLD. DAMAGE" → "COLD DAMAGE"
-    .replace(/!(?=[A-Za-z])/g, "I")                      // OCR reads I as !: "!GNITE" → "IGNITE"
+    // OCR !→I now handled in fuzzyFixWords OCR_CHAR_MAP
     .replace(/([A-Z]{2,})(\d)/g, "$1 $2")                // missing space: "TO288" → "TO 288"
     .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")     // strip diacritics (TỌ→TO)
-    .replace(/^[$#@!]+/, "")                               // strip leading junk chars
+    .replace(/^[$#@]+/, "")                                // strip leading junk (keep ! — OCR_CHAR_MAP handles !→I)
     .replace(/[!€.,;:]+$/g, "")                             // strip trailing junk (OCR: "ATTACKS." → "ATTACKS")
     .trim();
 }
