@@ -104,7 +104,7 @@ function stripTierRanges(text: string): string {
     .replace(/(\d)['`''](\d)/g, "$1-$2")                 // OCR reads - as apostrophe: "26'37" → "26-37"
     .replace(/(\d),(\d)/g, "$1.$2")                      // OCR decimal comma: "1,65" → "1.65" (list "32, 35" has space → no match)
     .replace(/([A-Za-z])[.,]\s+([A-Za-z])/g, "$1 $2")   // OCR stray punctuation: "COLD. DAMAGE" → "COLD DAMAGE"
-    // OCR !→I now handled in fuzzyFixWords OCR_CHAR_MAP
+    .replace(/\s*[-–—]\s*UNSCALABLE\s+VALUE\s*$/i, " \u2014 Unscalable Value") // OCR: "- UNSCALABLE VALUE" → " — Unscalable Value"
     .replace(/([A-Z]{2,})(\d)/g, "$1 $2")                // missing space: "TO288" → "TO 288"
     .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
@@ -836,23 +836,23 @@ export function reconstructClipboard(ocrText: string): string | null {
     sections.push(`Item Level: ${parsed.itemLevel}`);
   }
 
-  // Section 5: Flask stats — parser expects exact format:
-  // - "Recovers X Life over Y Seconds" etc. in one section
-  // - "Currently has N Charges" in its OWN section (parser regex: /^Currently has \d+ Charges$/)
+  // Section 5: Flask stats — ALL in one section so parseFlask() can consume it.
+  // parseFlask() looks for "Currently has N Charges" → if found, consumes entire section.
   if (parsed.flaskStats.length > 0) {
     const chargesLine = parsed.flaskStats.find((s) => /^CURRENTLY HAS/i.test(s));
     const otherFlask = parsed.flaskStats.filter((s) =>
       !/^CURRENTLY HAS|^RIGHT CLICK|^WHILE IN BELT|^REFILL AT/i.test(s),
     );
-    if (otherFlask.length > 0) {
-      sections.push(
-        otherFlask.map((s) => formatFlaskStat(s)).join("\n"),
-      );
+    const flaskLines: string[] = [];
+    for (const s of otherFlask) {
+      flaskLines.push(formatFlaskStat(s));
     }
     if (chargesLine) {
-      // Parser expects EXACT: "Currently has N Charges" (case-sensitive regex)
       const n = chargesLine.match(/\d+/)?.[0] ?? "0";
-      sections.push(`Currently has ${n} Charges`);
+      flaskLines.push(`Currently has ${n} Charges`);
+    }
+    if (flaskLines.length > 0) {
+      sections.push(flaskLines.join("\n"));
     }
   }
 
