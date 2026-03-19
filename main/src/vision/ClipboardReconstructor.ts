@@ -11,7 +11,7 @@
  *   "Item Class: Belts\nRarity: Rare\nName\nBase Type\n--------\n..."
  */
 
-import { matchStatLine, fuzzyFixWords } from "./StatMatcher";
+import { matchStatLine, fuzzyFixWords, addDictionaryWords } from "./StatMatcher";
 import { loadClientStrings, getClientString } from "./ClientStrings";
 
 // Singular OCR class → clipboard "Item Class" value
@@ -240,6 +240,22 @@ function formatFlaskStat(s: string): string {
 
 // Set of known class names (uppercase) for simple format detection
 const CLASS_NAMES = new Set(Object.keys(CLASS_MAP));
+
+// Feed CLASS_MAP words into fuzzy dictionary (class names aren't in stats.ndjson or client_strings)
+{
+  const classWords: string[] = [];
+  for (const key of Object.keys(CLASS_MAP)) {
+    for (const w of key.split(/\s+/)) {
+      if (w.length >= 3) classWords.push(w.charAt(0) + w.slice(1).toLowerCase());
+    }
+  }
+  for (const val of Object.values(CLASS_MAP)) {
+    for (const w of val.split(/\s+/)) {
+      if (w.length >= 3) classWords.push(w);
+    }
+  }
+  addDictionaryWords(classWords);
+}
 
 /**
  * Parse simple tooltip format (no Alt held, no advanced mod descriptions).
