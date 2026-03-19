@@ -677,7 +677,9 @@ export function reconstructClipboard(ocrText: string): string | null {
     "Two Hand Swords", "One Hand Swords", "Flails", "Spears",
     "Quarterstaves", "Daggers", "Claws", "Traps", "Flasks", "Jewels",
     "Charms", "Uncut Skill Gems", "Uncut Support Gems", "Uncut Spirit Gems",
-    "Waystone", "Tablet",
+    "Waystone",
+    // Tablet — renderer price check crashes (Vue: Cannot read 'sources')
+    // TODO: fix renderer to handle tablet items
   ]);
   if (!parsed.itemClass || !SUPPORTED_CLASSES.has(parsed.itemClass)) {
     console.log(`[GFN] Skipping unsupported item class: "${parsed.itemClass}"`);
