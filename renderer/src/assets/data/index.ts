@@ -216,13 +216,19 @@ async function loadStats(language: string, isTest = false) {
   };
 
   STAT_BY_MATCH_STR = function (matchStr: string) {
+    const hash = Number(fnv1a(matchStr, { size: 32 }));
     let start = dataBinarySearch(
       indexMatcher,
-      Number(fnv1a(matchStr, { size: 32 })),
+      hash,
       0,
       INDEX_WIDTH,
     );
-    if (start === -1) return undefined;
+    if (start === -1) {
+      if (matchStr.includes("\n")) {
+        console.log(`[GFN-Parse] STAT_BY_MATCH_STR: hash=${hash} NOT IN INDEX for multiline: "${matchStr.replace(/\n/g, "\\n").slice(0, 80)}"`);
+      }
+      return undefined;
+    }
     start = indexMatcher[start * INDEX_WIDTH + 1];
     const end = ndjson.indexOf("\n", start);
     const stat = JSON.parse(ndjson.slice(start, end)) as Stat;
@@ -231,7 +237,7 @@ async function loadStats(language: string, isTest = false) {
       (m) => m.string === matchStr || m.advanced === matchStr,
     );
     if (!matcher) {
-      // console.log('fnv1a32 collision')
+      console.log(`[GFN-Parse] STAT_BY_MATCH_STR: hash collision, matchStr="${matchStr.replace(/\n/g, "\\n").slice(0, 80)}"`);
       return undefined;
     }
     return { stat, matcher };
