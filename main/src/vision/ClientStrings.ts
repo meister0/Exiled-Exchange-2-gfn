@@ -6,6 +6,7 @@
 
 import fs from "fs";
 import path from "path";
+import { addDictionaryWords } from "./StatMatcher";
 
 let strings: Record<string, string> = {};
 
@@ -51,7 +52,19 @@ export function loadClientStrings(dataDir: string): void {
     if (objStart === -1 || objEnd === -1) return;
     const objStr = afterExport.slice(objStart, objEnd + 1);
     strings = new Function(`return ${objStr}`)() as Record<string, string>;
-    console.log(`[GFN] Loaded ${Object.keys(strings).length} client strings`);
+
+    // Feed all string values into fuzzy dictionary
+    const words: string[] = [];
+    for (const val of Object.values(strings)) {
+      if (typeof val === "string") {
+        for (const w of val.split(/[\s:,;.()]+/)) {
+          if (w.length >= 3) words.push(w);
+        }
+      }
+    }
+    addDictionaryWords(words);
+
+    console.log(`[GFN] Loaded ${Object.keys(strings).length} client strings, ${words.length} words added to dictionary`);
   } catch (e) {
     console.log("[GFN] Failed to load client_strings:", e);
   }

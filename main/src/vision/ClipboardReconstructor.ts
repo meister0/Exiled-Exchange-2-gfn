@@ -343,8 +343,9 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
   }
 
   // Parse lines after class name — WHITELIST approach
+  // Apply fuzzy correction to every line before classification.
   for (let i = classIdx + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+    const line = fuzzyFixWords(lines[i].trim());
     if (line.length < 3) continue;
 
     const reqMatch = line.match(REQUIRES_RE);
@@ -372,14 +373,13 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
     }
 
     // Mods: validate via stats.ndjson whitelist
-    // Try full line, then strip leading noise and retry
+    // Line is already fuzzy-fixed. Try full, then strip leading noise.
     const stripped = stripTierRanges(line);
-    const fixed = fuzzyFixWords(stripped);
-    let matched = matchStatLine(fixed);
+    let matched = matchStatLine(stripped);
     if (!matched) {
       const cleanedLine = stripped.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
       if (cleanedLine !== stripped) {
-        matched = matchStatLine(fuzzyFixWords(cleanedLine));
+        matched = matchStatLine(cleanedLine);
       }
     }
     if (matched) {
@@ -414,9 +414,10 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
   };
 
   // Find the "CLASS: ITEM LEVEL N" anchor line
+  // Apply fuzzy to fix OCR errors in class/level text
   let anchorIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(ITEM_LEVEL_RE);
+    const match = fuzzyFixWords(lines[i]).match(ITEM_LEVEL_RE);
     if (match) {
       // The captured group may contain OCR noise before the class name.
       // Normalize diacritics (OCR: "FLAŞK" → "FLASK")
@@ -484,9 +485,9 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
   }
 
   // Work forwards from anchor: WHITELIST approach.
-  // Only accept lines matching known tooltip patterns.
+  // Apply fuzzy word correction to every line before classification.
   for (let i = anchorIdx + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+    const line = fuzzyFixWords(lines[i].trim());
     if (line.length < 3) continue;
 
     // 1. Requirements
@@ -542,18 +543,15 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     }
 
     // 7. Mod lines — WHITELIST via stats.ndjson matching.
-    // Only accept lines that match a known game stat pattern.
-    // OCR may merge UI noise before the mod: "WEL46(5-6) TO LEVEL OF ALL..."
-    // Try full line first, then strip leading noise and retry.
+    // 7. Mod lines — WHITELIST via stats.ndjson matching.
+    // Line is already fuzzy-fixed. Try full, then strip leading noise.
     const stripped = stripTierRanges(line);
-    const fixed = fuzzyFixWords(stripped);
-    let matched = matchStatLine(fixed);
+    let matched = matchStatLine(stripped);
     if (!matched) {
       // Strip leading alphabetic noise before first number or +/-
       const cleanedLine = stripped.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
       if (cleanedLine !== stripped) {
-        const cleanFixed = fuzzyFixWords(cleanedLine);
-        matched = matchStatLine(cleanFixed);
+        matched = matchStatLine(cleanedLine);
       }
     }
     if (matched) {

@@ -59,14 +59,33 @@ export function loadStatMatchers(dataDir: string): void {
     }
   }
 
-  // Add common PoE2 words not in matchers
+  // Add common PoE2 words not in matchers — covers all tooltip fields
   for (const w of [
+    // Combat/status
     "Ignite", "Freeze", "Shock", "Chill", "Poison", "Bleed",
     "Attacks", "Spells", "Skills", "Damage", "Duration",
+    // Attributes
     "Strength", "Dexterity", "Intelligence", "Spirit",
-    "Evasion", "Armour", "Shield", "Energy", "Ward",
-    "Physical", "Lightning", "Resistance", "Maximum",
-    "Accuracy", "Rating", "Critical", "Chance",
+    // Defences
+    "Evasion", "Armour", "Shield", "Energy", "Ward", "Block",
+    "Physical", "Lightning", "Resistance", "Maximum", "Quality",
+    "Accuracy", "Rating", "Critical", "Chance", "Reload",
+    // Class names
+    "Amulet", "Ring", "Belt", "Quiver", "Gloves", "Helmet", "Boots",
+    "Body", "Armour", "Shield", "Focus", "Bow", "Crossbow",
+    "Wand", "Sceptre", "Staff", "Flail", "Spear", "Quarterstaff",
+    "Dagger", "Claw", "Trap", "Flask", "Jewel", "Charm",
+    // Tooltip structure
+    "Requires", "Level", "Prefix", "Suffix", "Implicit",
+    "Corrupted", "Mirrored", "Unidentified",
+    // Flask/charm
+    "Recovers", "Consumes", "Charges", "Currently", "Refill",
+    "Wells", "Killing", "Monsters",
+    // Item types
+    "Tablet", "Waystone", "Precursor", "Breach",
+    "Uncut", "Skill", "Support", "Gem",
+    // Requirements
+    "Str", "Dex", "Int",
   ]) {
     wordDict.set(w.toLowerCase(), w);
   }
@@ -74,6 +93,17 @@ export function loadStatMatchers(dataDir: string): void {
   console.log(
     `[GFN] Loaded ${entries.length} stat matchers, ${wordDict.size} dictionary words`,
   );
+}
+
+/**
+ * Add words to the fuzzy dictionary from external sources.
+ * Used to add client_strings labels, base type names, etc.
+ */
+export function addDictionaryWords(words: string[]): void {
+  if (!wordDict) wordDict = new Map();
+  for (const w of words) {
+    if (w.length >= 3) wordDict.set(w.toLowerCase(), w);
+  }
 }
 
 /**
