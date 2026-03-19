@@ -1,7 +1,7 @@
 <template>
   <div :class="$style['filter']">
     <div v-if="showSourceInfo" :class="$style['mods']">
-      <div class="pl-5 py-1" v-for="(source, idx) of filter.sources" :key="idx">
+      <div class="pl-5 py-1" v-for="(source, idx) of (filter.sources ?? [])" :key="idx">
         <source-info :source="source" :filter="filter" />
       </div>
     </div>
