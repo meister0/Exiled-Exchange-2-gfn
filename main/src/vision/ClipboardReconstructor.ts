@@ -106,8 +106,8 @@ function stripTierRanges(text: string): string {
     .replace(/([A-Za-z])[.,]\s+([A-Za-z])/g, "$1 $2")   // OCR stray punctuation: "COLD. DAMAGE" → "COLD DAMAGE"
     .replace(/\s*[-–—]\s*UNSCALABLE\s+VALUE\s*$/i, " \u2014 Unscalable Value") // OCR: "- UNSCALABLE VALUE" → " — Unscalable Value"
     .replace(/([A-Z]{2,})(\d)/g, "$1 $2")                // missing space: "TO288" → "TO 288"
-    .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
-    .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
+    .replace(/(\d+)\([\d.:]+[-–][\d.:]+\)/g, "$1")         // strip tier ranges: 85(85-99), 26(26:30-26:30)
+    .replace(/(\d+[\d.]*)\([\d.:]+\)/g, "$1")             // single-bound: 26(26:30)
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")     // strip diacritics (TỌ→TO)
     .replace(/^[$#@]+/, "")                                // strip leading junk (keep ! — OCR_CHAR_MAP handles !→I)
     .replace(/[!€.,;:]+$/g, "")                             // strip trailing junk (OCR: "ATTACKS." → "ATTACKS")
@@ -636,7 +636,7 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
         // Previous line = "Adds X to a Map", next = "10 uses remaining"
         modLine = fuzzyFixWords(prevLine) + "\n" + stripTierRanges(nextLine);
         i++;
-      } else if (nextLine) {
+      } else if (nextLine && !/^(IMPL[I1]C[I1]T?|PREF[I1]X|SUFF[I1]X)$/i.test(nextLine)) {
         modLine = nextLine;
         i++;
         // Merge multi-line: "Adds X to a Map" + "N uses remaining"
