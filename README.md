@@ -24,6 +24,7 @@ PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote 
 1. Clone and build (see Development below)
 2. Set Window Title to `NVIDIA GeForce NOW` in EE2 settings
 3. Grant Accessibility and Screen Recording permissions to Electron
+4. **In PoE2 settings**: bind "Advanced Mod Descriptions" to **Alt (Option)** — this makes tooltips show full mod info when you hold Alt, which OCR needs for accurate price checks
 5. Hotkeys: **Alt+D (Option+D)** = price check, **Shift+Space** = toggle overlay, **Esc** = close overlay
 
 ## Limitations
