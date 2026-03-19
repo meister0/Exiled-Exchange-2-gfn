@@ -331,10 +331,15 @@ export default defineComponent({
       checkPosition.value = e.position;
       advancedCheck.value = e.focusOverlay;
       performance.mark("price-check-start-handling-item");
-      item.value = handleItemPaste({ clipboard: e.clipboard, item: e.item });
+      try {
+        item.value = handleItemPaste({ clipboard: e.clipboard, item: e.item });
 
-      if (item.value.isOk()) {
-        queuePricesFetch();
+        if (item.value.isOk()) {
+          queuePricesFetch();
+        }
+      } catch (err) {
+        console.error("[PriceCheck] Failed to handle item:", err);
+        item.value = err("item.parse_error");
       }
       performance.mark("price-check-event-end");
     });

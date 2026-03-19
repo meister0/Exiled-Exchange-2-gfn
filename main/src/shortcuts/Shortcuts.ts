@@ -129,7 +129,13 @@ export class Shortcuts {
         return;
       }
 
-      if (!this.poeWindow.isActive && !this.overlay.isInteractable) return;
+      if (!this.poeWindow.isActive && !this.overlay.isInteractable) {
+        // Log dropped hotkeys for registered actions only
+        if (this.actions.some((a) => a.shortcut === pressed)) {
+          this.logger.write(`warn [GFN] Dropped "${pressed}" — GFN not active, overlay not open`);
+        }
+        return;
+      }
 
       for (const entry of this.actions) {
         if (entry.shortcut === pressed) {
