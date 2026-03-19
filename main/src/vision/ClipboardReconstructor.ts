@@ -625,7 +625,7 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
         }
       }
 
-      if (modLine) {
+      if (modLine && !/^T\d{1,2}$/i.test(modLine.trim())) {
         const mod = normalizeMarkerMod(modLine);
         console.log(`[GFN-OCR] standalone ${line} marker → "${mod.replace(/\n/g, "\\n")}"`);
         if (mod) target.push(mod);
@@ -717,8 +717,11 @@ function detectRarity(parsed: ParsedOcrItem): string {
 
   const totalMods = parsed.explicitMods.length + parsed.implicitMods.length;
   if (totalMods === 0) return "Normal";
-  if (parsed.explicitMods.length >= 2) return "Rare";
-  return "Magic";
+  // Tablets: max 1 prefix + 1 suffix = Magic. 3+ prefix+suffix = Rare.
+  // Regular items: 3+ explicit mods = Rare (magic has max 1 prefix + 1 suffix)
+  if (parsed.explicitMods.length >= 3) return "Rare";
+  if (parsed.explicitMods.length >= 1) return "Magic";
+  return "Normal";
 }
 
 /**
