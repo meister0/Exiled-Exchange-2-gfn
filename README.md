@@ -19,7 +19,12 @@ PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote 
 3. Reconstructs clipboard-compatible text from OCR output
 4. Sends to the same price check pipeline as normal Ctrl+C
 
-## Setup (macOS)
+## Requirements
+
+- **macOS only** — uses Apple Vision Framework for OCR
+- **GeForce NOW standalone app** (not browser version) — the app detects GFN by window title
+
+## Setup
 
 1. Clone and build (see Development below)
 2. Grant Accessibility and Screen Recording permissions to Electron
@@ -28,7 +33,6 @@ PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote 
 
 ## Limitations
 
-- **macOS only** — uses Apple Vision Framework for OCR
 - **OCR is not perfect** — damage ranges, small text, and merged observations can cause errors
 - **No tablet price check in simple mode** — use Alt+D for advanced tooltip
 
