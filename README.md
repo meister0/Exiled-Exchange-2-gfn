@@ -24,14 +24,12 @@ PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote 
 1. Clone and build (see Development below)
 2. Set Window Title to `NVIDIA GeForce NOW` in EE2 settings
 3. Grant Accessibility and Screen Recording permissions to Electron
-4. Run GFN in **windowed mode** (not fullscreen — overlay can't show over fullscreen Spaces)
-5. Hotkeys: **Alt+D** = price check, **Shift+Space** = toggle overlay, **Esc** = close overlay
+5. Hotkeys: **Ctrl+D** = price check, **Shift+Space** = toggle overlay, **Esc** = close overlay
 
 ## Limitations
 
 - **macOS only** — uses Apple Vision Framework for OCR
 - **OCR is not perfect** — damage ranges, small text, and merged observations can cause errors
-- **GFN windowed mode required** — overlay window can't display over fullscreen macOS Spaces
 - **No tablet price check in simple mode** — use Alt+D for advanced tooltip
 
 ## Development
