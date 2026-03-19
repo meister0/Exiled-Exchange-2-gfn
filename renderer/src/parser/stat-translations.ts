@@ -174,6 +174,8 @@ export function tryParseTranslation(
       continue;
     }
 
+    console.log(`[GFN-Parse] tryParse HIT: "${combination.stat.slice(0, 80).replace(/\n/g, "\\n")}" type=${modType} ref="${found.stat.ref.slice(0, 60)}"`);
+
     // Modifiers must be upgraded to the new values with a Divine Orb
     let legacyStatRolls = false;
 
