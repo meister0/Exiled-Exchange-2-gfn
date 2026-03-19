@@ -561,15 +561,18 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     }
 
     // 7. Mod lines — WHITELIST via stats.ndjson matching.
-    // 7. Mod lines — WHITELIST via stats.ndjson matching.
-    // Line is already fuzzy-fixed. Try full, then strip leading noise.
+    // Line is already fuzzy-fixed. Try full, then strip leading noise,
+    // then try common prefixes (OCR may strip "Adds" from damage mods).
     const stripped = stripTierRanges(line);
     let matched = matchStatLine(stripped);
     if (!matched) {
-      // Strip leading alphabetic noise before first number or +/-
       const cleanedLine = stripped.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
       if (cleanedLine !== stripped) {
         matched = matchStatLine(cleanedLine);
+        // Try prepending "Adds" for damage patterns: "7 TO 288 LIGHTNING DAMAGE"
+        if (!matched && /^\d+\s+TO\s+\d+\s+\w+\s+DAMAGE/i.test(cleanedLine)) {
+          matched = matchStatLine("Adds " + cleanedLine);
+        }
       }
     }
     if (matched) {

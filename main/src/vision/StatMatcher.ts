@@ -43,8 +43,6 @@ export function loadStatMatchers(dataDir: string): void {
         }
       }
 
-      if (!template.includes("#")) continue;
-
       const numSlots = (template.match(/#/g) || []).length;
       const escaped = template
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
