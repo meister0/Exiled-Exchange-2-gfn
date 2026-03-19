@@ -66,8 +66,9 @@ function formatCharmSlots(line: string): string {
   return match ? `Charm Slots: ${match[1]}` : line;
 }
 // Flask-specific stat patterns (not in stats.ndjson)
+// Note: "uses remaining" excluded — it's tablet implicit, not flask stat
 const FLASK_STAT_RE =
-  /^(RECOVERS|CONSUMES|CURRENTLY HAS|RIGHT CLICK|WHILE IN BELT|REFILL AT|\d+ USES REMAINING)/i;
+  /^(RECOVERS|CONSUMES|CURRENTLY HAS|RIGHT CLICK|WHILE IN BELT|REFILL AT)/i;
 const CORRUPTED_RE = /^CORRUPTED$/i;
 const MIRRORED_RE = /^MIRRORED$/i;
 
@@ -204,7 +205,7 @@ function isNoiseLine(line: string): boolean {
   // UI labels (may be truncated by AVF crop: "NVENTORY", "OSMETICS")
   if (/\b(N?VENTORY|OSMETICS?|COSMETICS?|INSPECT)\b/i.test(normalized)) return true;
   // Game info (may have diacritics or partial text)
-  if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|WOODLAND|HIDEOUT|TOWN|DREADNOUGHT)\b/i.test(normalized)) return true;
+  if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|WOODLAND|HIDEOUT|TOWN|DREADNOUGHT|REFORGING BENCH|WAYPOINT)\b/i.test(normalized)) return true;
   // Allocation modes: "Free for All", "Free tor All" (OCR), "Short Allocation"
   if (/\bFREE\s+(FOR|TOR)\s+ALL\b/i.test(normalized)) return true;
   if (/\d+\s*GOL[DP]?/i.test(normalized)) return true; // "34 GOLD", "34 GOLPonster" (merged)
