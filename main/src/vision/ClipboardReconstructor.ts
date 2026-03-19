@@ -100,7 +100,7 @@ interface ParsedOcrItem {
 function stripTierRanges(text: string): string {
   return text
     .replace(/^\$(\d)/, "+$1")                            // OCR reads + as $: "$14%" → "+14%"
-    .replace(/[.,]\s*DAMAGE/gi, " Damage")               // OCR: "COLD. DAMAGE" → "COLD Damage"
+    .replace(/([A-Za-z])[.,]\s+([A-Za-z])/g, "$1 $2")   // OCR stray punctuation: "COLD. DAMAGE" → "COLD DAMAGE"
     .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")     // strip diacritics (TỌ→TO)
