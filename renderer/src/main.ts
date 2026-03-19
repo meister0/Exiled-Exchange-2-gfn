@@ -21,7 +21,8 @@ import { Host } from "./web/background/IPC";
   const app = createApp(App);
   app.use(i18nPlugin);
   app.config.errorHandler = (err, _vm, info) => {
-    console.error(`[Vue Error] ${info}:`, err);
+    const stack = (err instanceof Error) ? err.stack?.split("\n").slice(0, 5).join("\n") : "";
+    console.error(`[Vue Error] ${info}: ${err}\n${stack}`);
   };
   app.mount("#app");
   if (import.meta.env.DEV) {

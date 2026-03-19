@@ -163,6 +163,7 @@ export default defineComponent({
         const prevCurrency =
           presets.value != null ? itemFilters.value.trade.currency : undefined;
 
+        try {
         presets.value = createPresets(item, {
           league: leagues.selectedId.value!,
           collapseListings: widget.value.collapseListings,
@@ -182,6 +183,11 @@ export default defineComponent({
           defaultAllSelected: widget.value.defaultAllSelected,
           autoFillEmptyAugmentSockets: widget.value.autoFillEmptyRuneSockets,
         });
+        console.log(`[GFN-Parse] createPresets OK: active=${presets.value.active}, filters=${presets.value.presets[0]?.filters?.length}, stats=${presets.value.presets[0]?.stats?.length}`);
+        } catch (err) {
+          console.error(`[GFN-Parse] createPresets FAILED:`, err);
+          presets.value = { active: "filters.preset_exact", presets: [{ id: "filters.preset_exact", filters: [], stats: [] }] } as any;
+        }
 
         if (
           (!props.advancedCheck && !widget.value.smartInitialSearch) ||
