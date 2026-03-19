@@ -130,7 +130,11 @@ export function parseClipboard(clipboard: string): Result<ParsedItem, string> {
       sections.shift(); // remove first section where CANNOT_USE_ITEM line was
     }
     const parsed = parseNamePlate(sections[0]);
-    if (!parsed.isOk()) return parsed;
+    if (!parsed.isOk()) {
+      console.log(`[GFN-Parse] parseNamePlate FAIL`);
+      return parsed;
+    }
+    console.log(`[GFN-Parse] parseNamePlate: name="${parsed.value.name}", baseType="${parsed.value.baseType}", rarity=${parsed.value.rarity}, category=${parsed.value.category}`);
 
     sections.shift();
     parsed.value.rawText = clipboard;
@@ -155,6 +159,7 @@ export function parseClipboard(clipboard: string): Result<ParsedItem, string> {
       }
     }
     performance.mark("parse-end");
+    console.log(`[GFN-Parse] parseClipboard done: category=${parsed.value.category}, name="${parsed.value.name}", statsByType=${parsed.value.statsByType.length}, newMods=${parsed.value.newMods.length}, unknownMods=${parsed.value.unknownModifiers.length}`);
     return Object.freeze(parsed);
   } catch (e) {
     console.log(e);

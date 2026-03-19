@@ -589,6 +589,7 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
         i++;
       }
       const mod = normalizeMarkerMod(rawMod);
+      console.log(`[GFN-OCR] IMPLICIT marker: raw="${rawMod.replace(/\n/g, "\\n")}" → normalized="${mod}"`);
       if (mod) {
         result.implicitMods.push(mod);
         continue;
@@ -612,9 +613,12 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       }
     }
     if (matched) {
+      console.log(`[GFN-OCR] step7 MATCH: "${stripped}" → "${matched.text}" (${matched.implicitOnly ? "implicit" : "explicit"})`);
       // Route to implicit or explicit based on stats.ndjson trade IDs
       (matched.implicitOnly ? result.implicitMods : result.explicitMods).push(matched.text);
       continue;
+    } else {
+      console.log(`[GFN-OCR] step7 MISS: "${stripped}"`);
     }
 
     // 8. Embedded mod extraction (AVF merges map mods + item mods on one line)
@@ -624,14 +628,17 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       const eFixed = fuzzyFixWords(eMod);
       const eMatched = matchStatLine(eFixed);
       if (eMatched) {
+        console.log(`[GFN-OCR] step8 embedded MATCH: "${eMod}" → "${eMatched.text}"`);
         (eMatched.implicitOnly ? result.implicitMods : result.explicitMods).push(eMatched.text);
       } else {
+        console.log(`[GFN-OCR] step8 embedded unmatched, raw: "${eMod}"`);
         result.explicitMods.push(eMod);
       }
       continue;
     }
 
     // Everything else is ignored (whitelist approach: unknown = noise)
+    console.log(`[GFN-OCR] step7 IGNORED (noise): "${line}"`);
   }
 
   return result;
@@ -660,6 +667,10 @@ export function reconstructClipboard(ocrText: string): string | null {
     .filter((l) => l.length > 0);
 
   const parsed = parseOcrLines(lines);
+
+  console.log(`[GFN-OCR] parseOcrLines result: class=${parsed.itemClass}, name=${parsed.name}, baseType=${parsed.baseType}, iLvl=${parsed.itemLevel}, stats=${parsed.stats.length}, flaskStats=${parsed.flaskStats.length}, implicits=${parsed.implicitMods.length}, explicits=${parsed.explicitMods.length}, corrupted=${parsed.corrupted}`);
+  if (parsed.implicitMods.length) console.log(`[GFN-OCR]   implicitMods: ${JSON.stringify(parsed.implicitMods)}`);
+  if (parsed.explicitMods.length) console.log(`[GFN-OCR]   explicitMods: ${JSON.stringify(parsed.explicitMods)}`);
 
   if (!parsed.itemClass) {
     console.log("[GFN] Reconstruct failed: no item class found");

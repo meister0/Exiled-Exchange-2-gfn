@@ -335,6 +335,7 @@ export default defineComponent({
         item.value = handleItemPaste({ clipboard: e.clipboard, item: e.item });
 
         if (item.value.isOk()) {
+          console.log(`[GFN-Parse] starting price fetch for: ${item.value.value.name}`);
           queuePricesFetch();
         }
       } catch (err) {
@@ -348,19 +349,23 @@ export default defineComponent({
       const newItem = (
         e.item ? ok(e.item as ParsedItem) : parseClipboard(e.clipboard)
       )
-        .andThen((item) =>
-          (item.category === ItemCategory.HeistContract &&
+        .andThen((item) => {
+          console.log(`[GFN-Parse] parseClipboard OK: category=${item.category}, name=${item.name}, rarity=${item.rarity}, baseType=${item.baseType}`);
+          return (item.category === ItemCategory.HeistContract &&
             item.rarity !== ItemRarity.Unique) ||
           (item.category === ItemCategory.Sentinel &&
             item.rarity !== ItemRarity.Unique)
             ? err("item.unknown")
-            : ok(item),
-        )
-        .mapErr((err) => ({
-          name: `${err}`,
-          message: `${err}_help`,
-          rawText: e.clipboard,
-        }));
+            : ok(item);
+        })
+        .mapErr((err) => {
+          console.log(`[GFN-Parse] parseClipboard FAIL: ${err}`);
+          return {
+            name: `${err}`,
+            message: `${err}_help`,
+            rawText: e.clipboard,
+          };
+        });
       performance.mark("price-check-parse-end");
       return newItem;
     }
