@@ -136,11 +136,12 @@ export function fuzzyFixWords(text: string): string {
     // Exact match — use canonical casing
     const exact = wordDict!.get(lower);
     if (exact) {
-      // Preserve original casing if all-upper
       return word === word.toUpperCase() ? exact.toUpperCase() : exact;
     }
 
-    // Fuzzy match — find closest word within edit distance 2
+    // Fuzzy match only for 4+ char words (3-char words have too many false positives)
+    if (word.length < 4) return word;
+
     let bestWord: string | null = null;
     let bestDist = 3; // max allowed distance
 

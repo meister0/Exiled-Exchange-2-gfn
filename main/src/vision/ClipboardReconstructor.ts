@@ -254,6 +254,8 @@ const CLASS_NAMES = new Set(Object.keys(CLASS_MAP));
       if (w.length >= 3) classWords.push(w);
     }
   }
+  // Also add short requirement words that must exact-match (not fuzzy)
+  classWords.push("Str", "Dex", "Int");
   addDictionaryWords(classWords);
 }
 
