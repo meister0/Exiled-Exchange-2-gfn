@@ -372,9 +372,16 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
     }
 
     // Mods: validate via stats.ndjson whitelist
+    // Try full line, then strip leading noise and retry
     const stripped = stripTierRanges(line);
     const fixed = fuzzyFixWords(stripped);
-    const matched = matchStatLine(fixed);
+    let matched = matchStatLine(fixed);
+    if (!matched) {
+      const cleanedLine = stripped.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
+      if (cleanedLine !== stripped) {
+        matched = matchStatLine(fuzzyFixWords(cleanedLine));
+      }
+    }
     if (matched) {
       result.explicitMods.push(matched);
       continue;
@@ -536,9 +543,19 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
 
     // 7. Mod lines — WHITELIST via stats.ndjson matching.
     // Only accept lines that match a known game stat pattern.
+    // OCR may merge UI noise before the mod: "WEL46(5-6) TO LEVEL OF ALL..."
+    // Try full line first, then strip leading noise and retry.
     const stripped = stripTierRanges(line);
     const fixed = fuzzyFixWords(stripped);
-    const matched = matchStatLine(fixed);
+    let matched = matchStatLine(fixed);
+    if (!matched) {
+      // Strip leading alphabetic noise before first number or +/-
+      const cleanedLine = stripped.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
+      if (cleanedLine !== stripped) {
+        const cleanFixed = fuzzyFixWords(cleanedLine);
+        matched = matchStatLine(cleanFixed);
+      }
+    }
     if (matched) {
       result.explicitMods.push(matched);
       continue;
