@@ -349,7 +349,7 @@ export default defineComponent({
       showSourceInfo: computed(
         () =>
           props.showSources &&
-          props.filter.sources.length &&
+          props.filter.sources?.length &&
           (props.filter.option == null ||
             (props.filter.tradeId &&
               props.filter.tradeId.length > 0 &&
