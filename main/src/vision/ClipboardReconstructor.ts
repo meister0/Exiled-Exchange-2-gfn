@@ -103,6 +103,7 @@ function stripTierRanges(text: string): string {
     .replace(/(\d)['`''](\d)/g, "$1-$2")                 // OCR reads - as apostrophe: "26'37" → "26-37"
     .replace(/(\d),(\d)/g, "$1.$2")                      // OCR decimal comma: "1,65" → "1.65" (list "32, 35" has space → no match)
     .replace(/([A-Za-z])[.,]\s+([A-Za-z])/g, "$1 $2")   // OCR stray punctuation: "COLD. DAMAGE" → "COLD DAMAGE"
+    .replace(/!(?=[A-Za-z])/g, "I")                      // OCR reads I as !: "!GNITE" → "IGNITE"
     .replace(/([A-Z]{2,})(\d)/g, "$1 $2")                // missing space: "TO288" → "TO 288"
     .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
