@@ -36,7 +36,7 @@ export class Shortcuts {
   set isGfnMode(v: boolean) {
     if (v !== this._isGfnMode) {
       this._isGfnMode = v;
-      console.log(`[GFN] Mode: ${v ? "GFN (OCR)" : "Local (clipboard)"}`);
+      this.logger.write(`info [GFN] Mode: ${v ? "GFN (OCR)" : "Local (clipboard)"}`);
     }
   }
   private areaTracker: WidgetAreaTracker;
@@ -60,7 +60,7 @@ export class Shortcuts {
       loadStatMatchers(dataDir);
       loadClientStrings(dataDir);
     } catch (e) {
-      console.log("[GFN] Failed to load stat matchers:", e);
+      logger.write(`error [GFN] Failed to load stat matchers: ${e}`);
     }
 
     const shortcuts = new Shortcuts(
@@ -119,10 +119,9 @@ export class Shortcuts {
       if (!this._isGfnMode) return;
       const pressed = eventToString(e);
       if (pressed === "not_supported_key" || pressed === "Shift" || pressed === "Alt" || pressed === "Ctrl") return;
-      console.log(`[GFN] keydown: "${pressed}" isActive=${this.poeWindow.isActive} interactable=${this.overlay.isInteractable}`);
       // Escape/Ctrl+W while overlay is open → close overlay
       if (this.overlay.isInteractable && (pressed === "Escape" || pressed === "Ctrl + W")) {
-        console.log(`[GFN] ${pressed} → closing overlay`);
+        this.logger.write(`info [GFN] ${pressed} → closing overlay`);
         process.nextTick(() => {
           this.overlay.assertGameActive();
           this.updateOverlayKeySuppressors();
@@ -134,7 +133,7 @@ export class Shortcuts {
 
       for (const entry of this.actions) {
         if (entry.shortcut === pressed) {
-          console.log(`[GFN] uIOhook matched: "${pressed}" → ${entry.action.type}`);
+          this.logger.write(`info [GFN] uIOhook matched: "${pressed}" → ${entry.action.type}`);
 
           // Release keys
           if (entry.keepModKeys) {
@@ -260,9 +259,9 @@ export class Shortcuts {
     }
 
     if (this._isGfnMode) {
-      console.log(`[GFN] ${validActions.length} actions loaded (uIOhook mode):`);
+      this.logger.write(`info [GFN] ${validActions.length} actions loaded (uIOhook mode):`);
       for (const a of validActions) {
-        console.log(`  [GFN]   "${a.shortcut}" → ${a.action.type}`);
+        this.logger.write(`info [GFN]   "${a.shortcut}" → ${a.action.type}`);
       }
       // Register globalShortcut with no-op callbacks purely to suppress
       // key events from reaching GFN (Carbon HotKey consumes the event).
@@ -273,15 +272,15 @@ export class Shortcuts {
 
 
   private handleGfnAction(entry: ShortcutAction) {
-    console.log(`[GFN] handleGfnAction: type=${entry.action.type}`);
+    this.logger.write(`info [GFN] handleGfnAction: type=${entry.action.type}`);
     if (entry.action.type === "toggle-overlay") {
-      console.log("[GFN] calling toggleActiveState");
+      this.logger.write("info [GFN] calling toggleActiveState");
       this.areaTracker.removeListeners();
       this.overlay.toggleActiveState();
     } else if (entry.action.type === "copy-item") {
       const { action } = entry;
       const pressPosition = screen.getCursorScreenPoint();
-      console.log("[GFN] copy-item → OCR pipeline");
+      this.logger.write("info [GFN] copy-item → OCR pipeline");
       // Hide overlay before screenshot so we capture the game, not our UI
       if (this.overlay.isInteractable) {
         this.overlay.assertGameActive();
@@ -295,7 +294,7 @@ export class Shortcuts {
           return ocrWithAppleVision(capture.image, capture.cursorInCrop);
         })
         .then((result) => {
-          console.log(`[GFN] OCR done in ${Math.round(result.elapsed)}ms`);
+          this.logger.write(`info [GFN] OCR done in ${Math.round(result.elapsed)}ms`);
           if (result.clipboard) {
             this.areaTracker.removeListeners();
             // GFN: use broadcast (not last-active) to ensure renderer gets it
@@ -312,11 +311,11 @@ export class Shortcuts {
             this.overlay.assertOverlayActive();
             this.updateOverlayKeySuppressors();
           } else {
-            console.log("[GFN] Could not reconstruct clipboard from OCR");
+            this.logger.write("info [GFN] Could not reconstruct clipboard from OCR");
           }
         })
         .catch((err) => {
-          console.error("[GFN] OCR failed:", err instanceof Error ? err.message : err);
+          this.logger.write(`error [GFN] OCR failed: ${err instanceof Error ? err.message : err}`);
         });
     } else if (entry.action.type === "paste-in-chat") {
       typeInChat(entry.action.text, entry.action.send, this.clipboard);
@@ -373,7 +372,7 @@ export class Shortcuts {
 
             if (this._isGfnMode && process.platform === "darwin") {
               // GFN mode: OCR screenshot instead of clipboard
-              console.log("[GFN] copy-item in GFN mode → OCR pipeline");
+              this.logger.write("info [GFN] copy-item in GFN mode → OCR pipeline");
               captureScreenAroundCursor()
                 .then((capture) => {
                   // Release keys AFTER screenshot (Alt held for advanced mods)
@@ -386,7 +385,7 @@ export class Shortcuts {
                   return ocrWithAppleVision(capture.image, capture.cursorInCrop);
                 })
                 .then((result) => {
-                  console.log(`[GFN] OCR done in ${Math.round(result.elapsed)}ms, confidence=${result.confidence}`);
+                  this.logger.write(`info [GFN] OCR done in ${Math.round(result.elapsed)}ms, confidence=${result.confidence}`);
                   const clipboardText = result.clipboard;
                   if (clipboardText) {
                     this.areaTracker.removeListeners();
@@ -403,11 +402,11 @@ export class Shortcuts {
                       this.overlay.assertOverlayActive();
                     }
                   } else {
-                    console.log("[GFN] Could not reconstruct clipboard from OCR");
+                    this.logger.write("info [GFN] Could not reconstruct clipboard from OCR");
                   }
                 })
                 .catch((err) => {
-                  console.error("[GFN] OCR failed:", err instanceof Error ? err.message : err);
+                  this.logger.write(`error [GFN] OCR failed: ${err instanceof Error ? err.message : err}`);
                 });
             } else {
               // Normal mode: read clipboard
@@ -495,12 +494,12 @@ export class Shortcuts {
       globalShortcut.register("Escape", () => {});
       globalShortcut.register("CommandOrControl+W", () => {});
       this._overlayKeysRegistered = true;
-      console.log("[GFN] Registered Escape/Ctrl+W suppressors");
+      this.logger.write("info [GFN] Registered Escape/Ctrl+W suppressors");
     } else if (!overlayOpen && this._overlayKeysRegistered) {
       globalShortcut.unregister("Escape");
       globalShortcut.unregister("CommandOrControl+W");
       this._overlayKeysRegistered = false;
-      console.log("[GFN] Unregistered Escape/Ctrl+W suppressors");
+      this.logger.write("info [GFN] Unregistered Escape/Ctrl+W suppressors");
     }
   }
 
@@ -517,12 +516,12 @@ export class Shortcuts {
       const electronKey = shortcutToElectron(entry.shortcut);
       const ok = globalShortcut.register(electronKey, () => {});
       if (!ok) {
-        console.log(`[GFN] Failed to register suppressor for "${entry.shortcut}"`);
+        this.logger.write(`error [GFN] Failed to register suppressor for "${entry.shortcut}"`);
       } else {
         count++;
       }
     }
-    console.log(`[GFN] Registered ${count} key suppressors (skipped Alt combos)`);
+    this.logger.write(`info [GFN] Registered ${count} key suppressors (skipped Alt combos)`);
   }
 }
 

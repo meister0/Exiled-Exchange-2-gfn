@@ -60,10 +60,13 @@ export class OverlayWindow {
       ]),
     );
 
-    // Forward ALL renderer console to main process stdout for debugging
+    // Forward renderer warnings and errors to logger (skip verbose LOG level)
     this.window.webContents.on("console-message", (_e, level, message) => {
-      const tag = level >= 2 ? "ERR" : level === 1 ? "WARN" : "LOG";
-      console.log(`[RENDERER:${tag}] ${message.slice(0, 200)}`);
+      if (level >= 2) {
+        this.logger.write(`error [Renderer] ${message.slice(0, 200)}`);
+      } else if (level === 1) {
+        this.logger.write(`warn [Renderer] ${message.slice(0, 200)}`);
+      }
     });
 
     this.window.webContents.on("before-input-event", this.handleExtraCommands);
@@ -114,7 +117,7 @@ export class OverlayWindow {
   }
 
   assertOverlayActive = () => {
-    console.log(`[GFN] assertOverlayActive: interactable=${this.isInteractable}, gfn=${this.isGfnMode}, hasWindow=${!!this.window}`);
+    this.logger.write(`info [GFN] assertOverlayActive: interactable=${this.isInteractable}, gfn=${this.isGfnMode}, hasWindow=${!!this.window}`);
     if (!this.isInteractable) {
       this.isInteractable = true;
       if (this.isGfnMode && this.window) {
@@ -136,7 +139,7 @@ export class OverlayWindow {
         this.window.setAlwaysOnTop(true, "screen-saver");
         this.window.focus();
         this._gfnOverlayShownAt = Date.now();
-        console.log("[GFN] Overlay shown: visible=" + this.window.isVisible() + " bounds=" + JSON.stringify(this.window.getBounds()));
+        this.logger.write("info [GFN] Overlay shown: visible=" + this.window.isVisible() + " bounds=" + JSON.stringify(this.window.getBounds()));
       } else {
         OverlayController.activateOverlay();
       }
@@ -145,7 +148,7 @@ export class OverlayWindow {
   };
 
   assertGameActive = () => {
-    console.log(`[GFN] assertGameActive: interactable=${this.isInteractable}, gfn=${this.isGfnMode}`);
+    this.logger.write(`info [GFN] assertGameActive: interactable=${this.isInteractable}, gfn=${this.isGfnMode}`);
     if (this.isInteractable) {
       this.isInteractable = false;
       if (this.isGfnMode && this.window) {
@@ -172,7 +175,7 @@ export class OverlayWindow {
   }
 
   toggleActiveState = () => {
-    console.log(`[GFN] toggleActiveState: interactable=${this.isInteractable}`);
+    this.logger.write(`info [GFN] toggleActiveState: interactable=${this.isInteractable}`);
     this.isOverlayKeyUsed = true;
     if (this.isInteractable) {
       this.assertGameActive();
