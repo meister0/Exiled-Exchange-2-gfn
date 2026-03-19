@@ -1,8 +1,10 @@
 import { desktopCapturer, screen } from "electron";
 import type { ImageData } from "./utils";
 
-const CROP_WIDTH = 900;
-const CROP_HEIGHT = 900;
+// Send full screen to OCR — anchor-based clustering handles noise filtering.
+// Cropping loses tooltip content when cursor is near screen edges.
+const CROP_WIDTH = 0;  // 0 = full screen
+const CROP_HEIGHT = 0;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 200;
 
@@ -54,39 +56,16 @@ export async function captureScreenAroundCursor(): Promise<{
     throw new Error("Failed to capture screen after retries — check Screen Recording permission");
   }
 
-  // Crop region around cursor (in native/pixel coordinates)
   const cx = Math.round(cursorPoint.x * scaleFactor);
   const cy = Math.round(cursorPoint.y * scaleFactor);
-  const cropW = Math.round(CROP_WIDTH * scaleFactor);
-  const cropH = Math.round(CROP_HEIGHT * scaleFactor);
 
-  // Offset crop upward — tooltip is usually above cursor
-  let x0 = cx - Math.round(cropW / 2);
-  let y0 = cy - Math.round(cropH * 0.65);
-  // Clamp crop to screen bounds
-  const effectiveCropW = Math.min(cropW, fullW);
-  const effectiveCropH = Math.min(cropH, fullH);
-  x0 = Math.max(0, Math.min(x0, fullW - effectiveCropW));
-  y0 = Math.max(0, Math.min(y0, fullH - effectiveCropH));
-  const actualW = Math.min(effectiveCropW, fullW - x0);
-  const actualH = Math.min(effectiveCropH, fullH - y0);
-
-  const cropped = new Uint8Array(actualW * actualH * 4);
-  for (let row = 0; row < actualH; row++) {
-    const srcOffset = ((y0 + row) * fullW + x0) * 4;
-    const dstOffset = row * actualW * 4;
-    cropped.set(bitmap.subarray(srcOffset, srcOffset + actualW * 4), dstOffset);
-  }
-
+  // Full screen — no crop. Anchor-based clustering handles noise.
   return {
     image: {
-      width: actualW,
-      height: actualH,
-      data: cropped,
+      width: fullW,
+      height: fullH,
+      data: new Uint8Array(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength),
     },
-    cursorInCrop: {
-      x: cx - x0,
-      y: cy - y0,
-    },
+    cursorInCrop: { x: cx, y: cy },
   };
 }
