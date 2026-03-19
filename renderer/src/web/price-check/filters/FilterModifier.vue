@@ -109,7 +109,7 @@
             <span v-if="showTag" :class="[$style['tag'], $style[`tag-${tag}`]]"
               >{{ t(`filters.tag_${tag.replace("-", "_")}`)
               }}{{
-                filter.sources.length > 1 ? ` x ${filter.sources.length}` : null
+                (filter.sources?.length ?? 0) > 1 ? ` x ${filter.sources.length}` : null
               }}</span
             >
             <filter-modifier-tiers :filter="filter" :item="item" />
@@ -355,10 +355,10 @@ export default defineComponent({
               props.filter.tradeId.length > 0 &&
               props.filter.tradeId[0] === "item.elemental_dps")) &&
           (props.filter.tag === FilterTag.Pseudo ||
-            props.filter.sources.length >= 2 ||
-            props.filter.sources[0].modifier.info.name != null ||
-            props.filter.sources[0].modifier.info.tier != null ||
-            props.filter.sources[0].modifier.info.rank != null),
+            (props.filter.sources?.length ?? 0) >= 2 ||
+            props.filter.sources?.[0]?.modifier.info.name != null ||
+            props.filter.sources?.[0]?.modifier.info.tier != null ||
+            props.filter.sources?.[0]?.modifier.info.rank != null),
       ),
       inputFocus,
       toggleFilter,

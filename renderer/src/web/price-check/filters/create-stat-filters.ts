@@ -117,7 +117,7 @@ export function createExactStatFilters(
         filter.disabled = false;
       }
     } else if (filter.tag === FilterTag.Explicit) {
-      filter.disabled = !filter.sources.some(
+      filter.disabled = !(filter.sources ?? []).some(
         (source) =>
           source.modifier.info.tier != null && source.modifier.info.tier <= 2,
       );
