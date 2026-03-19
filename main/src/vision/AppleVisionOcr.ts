@@ -119,7 +119,9 @@ function clusterTooltipObservations(
 
   if (!anchor) {
     // Fallback: use CLASS name as anchor for simple format (no Alt held)
-    const CLASS_NAMES_RE = /^(AMULET|RING|BELT|QUIVER|GLOVES|HELMET|BOOTS|BODY ARMOUR|SHIELD|FOCUS|BOW|CROSSBOW|WAND|SCEPTRE|STAFF|TWO HAND (?:MACE|SWORD)|ONE HAND (?:MACE|SWORD)|FLAIL|SPEAR|QUARTERSTAFF|DAGGER|CLAW|TRAP|FLASK|JEWEL|CHARM)S?$/i;
+    // OCR may merge class name with nearby text: "CROSSBOWthe Vaal League"
+    // Match class name at START of text (not exact), prefer shortest/cleanest match
+    const CLASS_NAMES_RE = /^(AMULET|RING|BELT|QUIVER|GLOVES|HELMET|BOOTS|BODY ARMOUR|SHIELD|FOCUS|BOW|CROSSBOW|WAND|SCEPTRE|STAFF|TWO HAND (?:MACE|SWORD)|ONE HAND (?:MACE|SWORD)|FLAIL|SPEAR|QUARTERSTAFF|DAGGER|CLAW|TRAP|FLASK|JEWEL|CHARM)S?\b/i;
     const classAnchor = observations.find((o) => CLASS_NAMES_RE.test(o.text.trim()));
     if (classAnchor) {
       console.log(
