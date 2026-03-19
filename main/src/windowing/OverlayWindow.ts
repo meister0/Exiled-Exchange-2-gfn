@@ -18,6 +18,7 @@ export class OverlayWindow {
   private appUrl = "";
   private _windowTitle = "";
   private _gfnOverlayShownAt = 0;
+  private _gfnAttachedSent = false;
 
   constructor(
     private server: ServerEvents,
@@ -118,11 +119,14 @@ export class OverlayWindow {
       this.isInteractable = true;
       if (this.isGfnMode && this.window) {
         // GFN: show window directly (OverlayController not attached)
-        // First tell renderer overlay is ready (enables widgets)
-        this.server.sendEventTo("broadcast", {
-          name: "MAIN->OVERLAY::overlay-attached",
-          payload: undefined,
-        });
+        // Send overlay-attached only once (triggers "ready" notification in renderer)
+        if (!this._gfnAttachedSent) {
+          this._gfnAttachedSent = true;
+          this.server.sendEventTo("broadcast", {
+            name: "MAIN->OVERLAY::overlay-attached",
+            payload: undefined,
+          });
+        }
         this.server.sendEventTo("broadcast", {
           name: "MAIN->OVERLAY::focus-change",
           payload: { game: false, overlay: true, usingHotkey: true },
