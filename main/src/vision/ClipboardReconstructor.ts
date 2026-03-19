@@ -344,6 +344,21 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
     }
   }
 
+  // Pass 3: starts-with match for OCR merges ("CROSSBOWthe Vaal League")
+  if (classIdx === -1) {
+    for (let i = 0; i < lines.length; i++) {
+      const upper = lines[i].trim().toUpperCase();
+      for (const cls of CLASS_NAMES) {
+        if (upper.startsWith(cls)) {
+          result.itemClass = CLASS_MAP[cls]!;
+          classIdx = i;
+          break;
+        }
+      }
+      if (classIdx !== -1) break;
+    }
+  }
+
   console.log(`[GFN-OCR] parseSimpleFormat: classIdx=${classIdx}, class=${result.itemClass}, line="${classIdx >= 0 ? lines[classIdx]?.slice(0, 40) : "N/A"}"`);
 
   // Fallback: find anchor via REQUIRES line and work backwards
