@@ -582,19 +582,15 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       let modLine = "";
 
       // Look back: previous line might be first part of multi-line mod
+      // ONLY if next line is "N uses remaining" (confirms tablet multi-line)
       const prevLine = (i > anchorIdx + 1) ? lines[i - 1].trim() : "";
       const nextLine = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
+      const nextIsUsesRemaining = /\d+\s+uses?\s+remaining/i.test(nextLine);
 
-      if (prevLine && !/^(IMPL|PREF|SUFF|T\d)/i.test(prevLine) && nextLine) {
-        // Previous line + next line could be multi-line mod
-        modLine = fuzzyFixWords(prevLine);
-        if (/\d+\s+uses?\s+remaining/i.test(nextLine)) {
-          modLine = modLine + "\n" + stripTierRanges(nextLine);
-          i++;
-        }
-        // Remove previous line from explicit mods if it was wrongly added
-        const prevIdx = result.explicitMods.indexOf(prevLine);
-        if (prevIdx >= 0) result.explicitMods.splice(prevIdx, 1);
+      if (nextIsUsesRemaining && prevLine && !/^(IMPL|PREF|SUFF|T\d|\d+$)/i.test(prevLine) && prevLine.length > 10) {
+        // Previous line = "Adds X to a Map", next = "10 uses remaining"
+        modLine = fuzzyFixWords(prevLine) + "\n" + stripTierRanges(nextLine);
+        i++;
       } else if (nextLine) {
         modLine = nextLine;
         i++;
