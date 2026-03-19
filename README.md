@@ -1,49 +1,54 @@
-# ![Perfect Jewelers Orb](./renderer/public/images/jeweler.png) Exiled Exchange 2
+# Exiled Exchange 2 — GeForce NOW Edition
 
-![GitHub Downloads (specific asset, latest release)](https://img.shields.io/github/downloads/kvan7/exiled-exchange-2/latest/Exiled-Exchange-2-Setup-0.13.10.exe?style=plastic&link=https%3A%2F%2Ftooomm.github.io%2Fgithub-release-stats%2F%3Fusername%3Dkvan7%26repository%3DExiled-Exchange-2)
-![GitHub Tag](https://img.shields.io/github/v/tag/kvan7/exiled-exchange-2?style=plastic&label=latest%20version)
-![GitHub commits since latest release (branch)](https://img.shields.io/github/commits-since/kvan7/exiled-exchange-2/latest/dev?style=plastic)
+Fork of [Exiled Exchange 2](https://github.com/Kvan7/Exiled-Exchange-2) with **OCR-based price checking for GeForce NOW users**.
 
-Path of Exile 2 overlay program for price checking items, among many other loved features.
+PoE2 on GeForce NOW doesn't allow clipboard access (Ctrl+C copies to the remote machine, not your local one). This fork replaces clipboard reading with Apple Vision Framework OCR — screenshot the tooltip, recognize text, price check.
 
-Fork of [Awakened PoE Trade](https://github.com/SnosMe/awakened-poe-trade).
+## What's different from upstream
 
-The ONLY official download sites are <https://kvan7.github.io/Exiled-Exchange-2/download> or <https://github.com/Kvan7/Exiled-Exchange-2/releases>, any other locations are not official and may be malicious.
+- **OCR price checking** via Apple Vision Framework (macOS only) — no clipboard needed
+- **Auto-detect GFN**: set Window Title to "NVIDIA GeForce NOW" in settings, the app handles the rest
+- **All default hotkeys work** — uIOhook captures keys globally, overlay shows over GFN window
+- **Fuzzy OCR correction** — dictionary from game data (stats.ndjson + client_strings.js), handles typos
+- **Full item support** — armour, weapons (DPS calc), flasks, charms, tablets, gems, jewellery
 
-## Moving from POE1/Awakened PoE Trade
+## How it works
 
-1. Download latest release from [releases](https://github.com/Kvan7/exiled-exchange-2/releases)
-2. Run installer
-3. Run Exiled Exchange 2
-4. Launch PoE2 to generate correct files
-5. Quit PoE2 and EE2 after seeing the banner popup that EE2 loaded
-6. Copy `apt-data` from `%APPDATA%\awakened-poe-trade` to `%APPDATA%\exiled-exchange-2` to copy your previous settings
-  - Resulting directory structure should look like this:
-  - `%APPDATA%\exiled-exchange-2\apt-data\`
-    - `config.json`
-7. Edit `config.json` and change the value of "windowTitle": "Path of Exile" to instead be "Path of Exile 2", otherwise it will open only for poe1
-8. Start Exiled Exchange 2 and PoE2
+1. Press hotkey (Alt+D by default) while hovering an item in GFN
+2. App takes a screenshot, runs Apple Vision OCR on the tooltip area
+3. Reconstructs clipboard-compatible text from OCR output
+4. Sends to the same price check pipeline as normal Ctrl+C
 
-## FAQ
+## Setup (macOS)
 
-<https://kvan7.github.io/Exiled-Exchange-2/faq>
+1. Clone and build (see Development below)
+2. Set Window Title to `NVIDIA GeForce NOW` in EE2 settings
+3. Grant Accessibility and Screen Recording permissions to Electron
+4. Run GFN in **windowed mode** (not fullscreen — overlay can't show over fullscreen Spaces)
+5. Hotkeys: **Alt+D** = price check, **Shift+Space** = toggle overlay, **Esc** = close overlay
 
-## Tool showcase
+## Limitations
 
-| Gem                                                | Rare                                                 | Unique                                                   | Currency                                                     |
-| -------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
-| ![Gem Check](./docs/reference-images/GemCheck.png) | ![Rare Check](./docs/reference-images/RareCheck.png) | ![Unique Check](./docs/reference-images/UniqueCheck.png) | ![Currency Check](./docs/reference-images/CurrencyCheck.png) |
+- **macOS only** — uses Apple Vision Framework for OCR
+- **OCR is not perfect** — damage ranges, small text, and merged observations can cause errors
+- **GFN windowed mode required** — overlay window can't display over fullscreen macOS Spaces
+- **No tablet price check in simple mode** — use Alt+D for advanced tooltip
 
-### Development
+## Development
 
-See [DEVELOPING.md](./DEVELOPING.md)
+See [DEVELOPING.md](./DEVELOPING.md) and [CLAUDE.md](./CLAUDE.md) for architecture details.
 
-### Acknowledgments
+```bash
+# Terminal 1
+cd renderer && npm install && npm run make-index-files && npm run dev
 
-- [awakened-poe-trade](https://github.com/SnosMe/awakened-poe-trade)
+# Terminal 2
+cd main && npm install && npm run dev
+```
+
+## Acknowledgments
+
+- [Exiled Exchange 2](https://github.com/Kvan7/Exiled-Exchange-2) — upstream project
+- [Awakened PoE Trade](https://github.com/SnosMe/awakened-poe-trade) — original project
 - [libuiohook](https://github.com/kwhat/libuiohook)
-- [RePoE](https://github.com/brather1ng/RePoE)
-- [poeprices.info](https://www.poeprices.info/)
-- [poe.ninja](https://poe.ninja/)
-
-![graph](https://i.imgur.com/MATqhv7.png)
+- [Apple Vision Framework](https://developer.apple.com/documentation/vision) — OCR engine
