@@ -64,13 +64,11 @@ export const useLeagues = createGlobalState(() => {
         (league) => league.id === selectedId.value,
       );
       if (!leagueIsAlive && !isPrivateLeague(selectedId.value ?? "")) {
-        if (tradeLeagues.value.length > 2) {
-          const TMP_CHALLENGE = 2;
-          selectedId.value = tradeLeagues.value[TMP_CHALLENGE].id;
-        } else {
-          const STANDARD = 0;
-          selectedId.value = tradeLeagues.value[STANDARD].id;
-        }
+        // Pick first non-permanent league (challenge league) or fallback to first
+        const challenge = tradeLeagues.value.find(
+          (l) => l.id !== "Standard" && l.id !== "Hardcore",
+        );
+        selectedId.value = challenge?.id ?? tradeLeagues.value[0]?.id;
         console.log(`[Leagues] auto-selected: ${selectedId.value}`);
       }
     } catch (e) {
