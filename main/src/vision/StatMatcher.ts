@@ -119,7 +119,6 @@ export function matchStatLine(ocrLine: string): StatMatchResult | null {
   if (fixed !== trimmed) {
     const fuzzyResult = tryMatch(fixed);
     if (fuzzyResult) return fuzzyResult;
-    }
   }
 
   return null;
