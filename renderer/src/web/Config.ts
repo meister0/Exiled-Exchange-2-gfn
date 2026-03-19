@@ -194,7 +194,7 @@ export const defaultConfig = (): Config => ({
   ],
   clientLog: null,
   gameConfig: null,
-  windowTitle: "Path of Exile 2",
+  windowTitle: "NVIDIA GeForce NOW",
   logKeys: false,
   accountName: "",
   stashScroll: true,
