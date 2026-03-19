@@ -244,6 +244,27 @@ function formatFlaskStat(s: string): string {
 // Set of known class names (uppercase) for simple format detection
 const CLASS_NAMES = new Set(Object.keys(CLASS_MAP));
 
+/** Fuzzy match OCR class name against CLASS_MAP keys (Levenshtein ≤ 2) */
+function fuzzyMatchClass(ocrClass: string): string | null {
+  const upper = ocrClass.toUpperCase();
+  let best: string | null = null;
+  let bestDist = 3;
+  for (const cls of CLASS_NAMES) {
+    if (Math.abs(cls.length - upper.length) >= bestDist) continue;
+    let dist = 0;
+    const len = Math.max(cls.length, upper.length);
+    for (let i = 0; i < len; i++) {
+      if (cls[i] !== upper[i]) dist++;
+      if (dist >= bestDist) break;
+    }
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = cls;
+    }
+  }
+  return best ? CLASS_MAP[best]! : null;
+}
+
 // Feed CLASS_MAP words into fuzzy dictionary (class names aren't in stats.ndjson or client_strings)
 {
   const classWords: string[] = [];
@@ -453,10 +474,10 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
         }
       }
       if (!foundClass) {
-        // Fallback: use last word (most likely the class name)
+        // Fallback: fuzzy match class name against CLASS_MAP keys
         const words = rawClass.split(/\s+/);
         const lastWord = words[words.length - 1];
-        result.itemClass = CLASS_MAP[lastWord] || toTitleCase(lastWord);
+        result.itemClass = CLASS_MAP[lastWord] || fuzzyMatchClass(lastWord) || toTitleCase(lastWord);
       }
       result.itemLevel = parseInt(match[2], 10);
       anchorIdx = i;
@@ -656,8 +677,7 @@ export function reconstructClipboard(ocrText: string): string | null {
     "Two Hand Swords", "One Hand Swords", "Flails", "Spears",
     "Quarterstaves", "Daggers", "Claws", "Traps", "Flasks", "Jewels",
     "Charms", "Uncut Skill Gems", "Uncut Support Gems", "Uncut Spirit Gems",
-    "Waystone",
-    // "Tablet" — crashes renderer, skip until fixed
+    "Waystone", "Tablet",
   ]);
   if (!parsed.itemClass || !SUPPORTED_CLASSES.has(parsed.itemClass)) {
     console.log(`[GFN] Skipping unsupported item class: "${parsed.itemClass}"`);
