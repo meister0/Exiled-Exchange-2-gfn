@@ -165,7 +165,8 @@ export function tryParseTranslation(
     const realType =
       modType === ModifierType.AddedAugment ? ModifierType.Augment : modType;
     if (!found) {
-      console.log(`[GFN-Parse] tryParse MISS (not found): "${combination.stat.slice(0, 60)}" type=${modType}`);
+      const hasNewline = combination.stat.includes("\n");
+      console.log(`[GFN-Parse] tryParse MISS (not found): "${combination.stat.slice(0, 80).replace(/\n/g, "\\n")}" type=${modType}${hasNewline ? " [MULTILINE]" : ""}`);
       continue;
     }
     if (!found.stat.trade.ids || !found.stat.trade.ids[realType]) {
