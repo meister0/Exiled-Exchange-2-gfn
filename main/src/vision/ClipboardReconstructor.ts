@@ -50,7 +50,7 @@ const CLASS_MAP: Record<string, string> = {
   "UNCUT SPIRIT GEM": "Uncut Spirit Gems",
   TABLET: "Tablet",
   "PRECURSOR TABLET": "Tablet",
-  WAYSTONE: "Waystones",
+  WAYSTONE: "Waystone",
 };
 
 // Regex patterns for OCR line classification
