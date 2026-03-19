@@ -12,6 +12,7 @@
  */
 
 import { matchStatLine, fuzzyFixWords } from "./StatMatcher";
+import { loadClientStrings, getClientString } from "./ClientStrings";
 
 // Singular OCR class → clipboard "Item Class" value
 const CLASS_MAP: Record<string, string> = {
@@ -99,6 +100,7 @@ interface ParsedOcrItem {
 function stripTierRanges(text: string): string {
   return text
     .replace(/^\$(\d)/, "+$1")                            // OCR reads + as $: "$14%" → "+14%"
+    .replace(/[.,]\s*DAMAGE/gi, " Damage")               // OCR: "COLD. DAMAGE" → "COLD Damage"
     .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")     // strip diacritics (TỌ→TO)
@@ -608,16 +610,18 @@ export function reconstructClipboard(ocrText: string): string | null {
   header.push(parsed.baseType);
   sections.push(header.join("\n"));
 
-  // Section 2: Stats — convert "EVASION RATING: 44" → "Evasion Rating: 44"
+  // Section 2: Stats — use EXACT labels from renderer client_strings
+  // Parser does startsWith() match, so casing must be exact.
   if (parsed.stats.length > 0) {
     sections.push(
       parsed.stats
         .map((s) => {
           const colonIdx = s.indexOf(":");
-          if (colonIdx === -1) return toTitleCase(s.trim());
-          const label = s.slice(0, colonIdx).trim();
+          if (colonIdx === -1) return s.trim();
+          const label = s.slice(0, colonIdx).trim().toUpperCase();
           const value = s.slice(colonIdx + 1).trim();
-          return toTitleCase(label) + ": " + value;
+          const exact = getClientString(label);
+          return (exact ?? toTitleCase(label.toLowerCase())) + ": " + value;
         })
         .join("\n"),
     );

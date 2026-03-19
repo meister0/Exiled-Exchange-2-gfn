@@ -59,11 +59,10 @@ export class OverlayWindow {
       ]),
     );
 
-    // Forward renderer console to main process stdout for debugging
+    // Forward ALL renderer console to main process stdout for debugging
     this.window.webContents.on("console-message", (_e, level, message) => {
-      if (level >= 2 || /parse|error|item/i.test(message)) {
-        console.log(`[RENDERER] ${message}`);
-      }
+      const tag = level >= 2 ? "ERR" : level === 1 ? "WARN" : "LOG";
+      console.log(`[RENDERER:${tag}] ${message.slice(0, 200)}`);
     });
 
     this.window.webContents.on("before-input-event", this.handleExtraCommands);

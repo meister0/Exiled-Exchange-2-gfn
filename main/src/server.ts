@@ -61,6 +61,10 @@ export function sendEventTo(
 ) {
   const msg = JSON.stringify(event);
   if (target === "broadcast") {
+    const count = websocketServer.clients.size;
+    if (event.name.includes("item-text")) {
+      console.log(`[WS] Broadcasting ${event.name} to ${count} clients`);
+    }
     for (const client of websocketServer.clients) {
       client.send(msg);
     }

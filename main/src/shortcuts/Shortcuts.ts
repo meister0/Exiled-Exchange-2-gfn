@@ -12,6 +12,7 @@ import { OcrWorker } from "../vision/link-main";
 import { captureScreenAroundCursor } from "../vision/ScreenCapture";
 import { ocrWithAppleVision } from "../vision/AppleVisionOcr";
 import { loadStatMatchers } from "../vision/StatMatcher";
+import { loadClientStrings } from "../vision/ClientStrings";
 import type { ShortcutAction } from "../../../ipc/types";
 import type { Logger } from "../RemoteLogger";
 import type { OverlayWindow } from "../windowing/OverlayWindow";
@@ -57,6 +58,7 @@ export class Shortcuts {
         ? require("path").join(__dirname, "../../renderer/public/data/en")
         : require("path").join(__dirname, "../renderer/data/en");
       loadStatMatchers(dataDir);
+      loadClientStrings(dataDir);
     } catch (e) {
       console.log("[GFN] Failed to load stat matchers:", e);
     }
