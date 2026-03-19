@@ -222,8 +222,8 @@ function isNoiseLine(line: string): boolean {
  */
 function normalizeMarkerMod(raw: string): string {
   let trimmed = raw.trim();
-  // Strip alphabetic noise prefix before the first number or +/-
-  if (!/^[+-\d]/.test(trimmed)) {
+  // Strip alphabetic noise prefix, but NOT for multi-line mods (tablet implicits)
+  if (!trimmed.includes("\n") && !/^[+-\d]/.test(trimmed)) {
     trimmed = trimmed.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
   }
   const stripped = stripTierRanges(trimmed);
@@ -580,15 +580,16 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       if (mod) { result.explicitMods.push(mod); continue; }
     }
     if (embeddedImplicit) {
-      let mod = normalizeMarkerMod(embeddedImplicit[1]);
+      let rawMod = embeddedImplicit[1].trim();
+      // Tablet implicits are multi-line: "Adds X to a Map\n# uses remaining"
+      // Merge with next line before matching (matchStatLine needs full text)
+      const nextLine = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
+      if (/\d+\s+uses?\s+remaining/i.test(nextLine)) {
+        rawMod = rawMod + "\n" + stripTierRanges(nextLine);
+        i++;
+      }
+      const mod = normalizeMarkerMod(rawMod);
       if (mod) {
-        // Tablet implicits are multi-line: "Adds X to a Map\n# uses remaining"
-        // Check next line for "N uses remaining" and merge
-        const nextLine = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
-        if (/\d+\s+uses?\s+remaining/i.test(nextLine)) {
-          mod = mod + "\n" + stripTierRanges(nextLine);
-          i++; // skip next line
-        }
         result.implicitMods.push(mod);
         continue;
       }
