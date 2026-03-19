@@ -164,7 +164,12 @@ export function tryParseTranslation(
     const found = STAT_BY_MATCH_STR(combination.stat);
     const realType =
       modType === ModifierType.AddedAugment ? ModifierType.Augment : modType;
-    if (!found || !found.stat.trade.ids || !found.stat.trade.ids[realType]) {
+    if (!found) {
+      console.log(`[GFN-Parse] tryParse MISS (not found): "${combination.stat.slice(0, 60)}" type=${modType}`);
+      continue;
+    }
+    if (!found.stat.trade.ids || !found.stat.trade.ids[realType]) {
+      console.log(`[GFN-Parse] tryParse MISS (no trade ID for type=${realType}): "${combination.stat.slice(0, 60)}" available=[${Object.keys(found.stat.trade.ids || {})}]`);
       continue;
     }
 

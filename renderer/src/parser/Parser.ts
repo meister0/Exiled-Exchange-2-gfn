@@ -139,6 +139,8 @@ export function parseClipboard(clipboard: string): Result<ParsedItem, string> {
     sections.shift();
     parsed.value.rawText = clipboard;
 
+    console.log(`[GFN-Parse] sections to parse: ${sections.length}, content: ${JSON.stringify(sections.map(s => s.join("|").slice(0, 50)))}`);
+
     performance.mark("parse-start-parsers");
     // each section can be parsed at most by one parser
     // and each parser can only be used to parse one section
