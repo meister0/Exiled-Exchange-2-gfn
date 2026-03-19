@@ -1,4 +1,4 @@
-# Exiled Exchange 2 — GeForce NOW Edition
+# [WIP] Exiled Exchange 2 — GeForce NOW Edition
 
 Fork of [Exiled Exchange 2](https://github.com/Kvan7/Exiled-Exchange-2) with **OCR-based price checking for GeForce NOW users**.
 
