@@ -1,5 +1,6 @@
 import path from "path";
 import { BrowserWindow, dialog, shell, Menu } from "electron";
+import { execFile } from "child_process";
 import {
   OverlayController,
   OVERLAY_WINDOW_OPTS,
@@ -16,6 +17,7 @@ export class OverlayWindow {
   private isOverlayKeyUsed = false;
   private appUrl = "";
   private _windowTitle = "";
+  private _gfnOverlayShownAt = 0;
 
   constructor(
     private server: ServerEvents,
@@ -24,7 +26,10 @@ export class OverlayWindow {
   ) {
     this.server.onEventAnyClient(
       "OVERLAY->MAIN::focus-game",
-      this.assertGameActive,
+      () => {
+        // GFN: overlay is only closed via keyboard (Escape/toggle), not renderer events
+        if (!this.isGfnMode) this.assertGameActive();
+      },
     );
     this.poeWindow.on("active-change", this.handlePoeWindowActiveChange);
     this.poeWindow.onAttach(this.handleOverlayAttached);
@@ -42,7 +47,6 @@ export class OverlayWindow {
       height: 600,
       webPreferences: {
         allowRunningInsecureContent: false,
-        webviewTag: true,
         spellcheck: false,
       },
     });
@@ -54,6 +58,13 @@ export class OverlayWindow {
         { role: "toggleDevTools" },
       ]),
     );
+
+    // Forward renderer console to main process stdout for debugging
+    this.window.webContents.on("console-message", (_e, level, message) => {
+      if (level >= 2 || /parse|error|item/i.test(message)) {
+        console.log(`[RENDERER] ${message}`);
+      }
+    });
 
     this.window.webContents.on("before-input-event", this.handleExtraCommands);
     this.window.webContents.on(
@@ -121,6 +132,7 @@ export class OverlayWindow {
         this.window.moveTop();
         this.window.setAlwaysOnTop(true, "screen-saver");
         this.window.focus();
+        this._gfnOverlayShownAt = Date.now();
         console.log("[GFN] Overlay shown: visible=" + this.window.isVisible() + " bounds=" + JSON.stringify(this.window.getBounds()));
       } else {
         OverlayController.activateOverlay();
@@ -140,6 +152,11 @@ export class OverlayWindow {
           payload: { game: true, overlay: false, usingHotkey: true },
         });
         this.window.hide();
+        // Return focus to GFN app
+        execFile("osascript", [
+          "-e",
+          'tell application "System Events" to set frontmost of first process whose name contains "GeForce" to true',
+        ]);
       } else {
         OverlayController.focusTarget();
       }
@@ -234,16 +251,23 @@ export class OverlayWindow {
 
   private handlePoeWindowActiveChange = (isActive: boolean) => {
     if (isActive && this.isInteractable) {
+      if (this.isGfnMode) {
+        // GFN: don't auto-hide overlay when GFN regains frontmost status.
+        // The overlay is always-on-top and only hidden via toggle/assertGameActive.
+        return;
+      }
       this.isInteractable = false;
     }
-    this.server.sendEventTo("broadcast", {
-      name: "MAIN->OVERLAY::focus-change",
-      payload: {
-        game: isActive,
-        overlay: this.isInteractable,
-        usingHotkey: this.isOverlayKeyUsed,
-      },
-    });
-    this.isOverlayKeyUsed = false;
+    if (!this.isGfnMode) {
+      this.server.sendEventTo("broadcast", {
+        name: "MAIN->OVERLAY::focus-change",
+        payload: {
+          game: isActive,
+          overlay: this.isInteractable,
+          usingHotkey: this.isOverlayKeyUsed,
+        },
+      });
+      this.isOverlayKeyUsed = false;
+    }
   };
 }

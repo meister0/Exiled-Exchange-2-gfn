@@ -23,7 +23,11 @@ if (!app.requestSingleInstanceLock()) {
 if (process.platform !== "darwin") {
   app.disableHardwareAcceleration();
 }
-app.enableSandbox();
+// Electron 39+ defaults to sandbox:true per-window.
+// app.enableSandbox() is removed: it globally locks sandbox on with no
+// per-window override, which breaks electron-devtools-installer (VUEJS_DEVTOOLS
+// extension content-scripts), webviewTag preloads, and electron-overlay-window's
+// internal calculateMacTitleBarHeight() BrowserWindow on macOS.
 let tray: AppTray;
 
 (async () => {

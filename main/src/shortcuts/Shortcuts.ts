@@ -114,9 +114,22 @@ export class Shortcuts {
         this.logger.write(`debug [Shortcuts] Keydown ${pressed}`);
       }
 
-      if (!this._isGfnMode || !this.poeWindow.isActive) return;
-
+      if (!this._isGfnMode) return;
       const pressed = eventToString(e);
+      if (pressed === "not_supported_key" || pressed === "Shift" || pressed === "Alt" || pressed === "Ctrl") return;
+      console.log(`[GFN] keydown: "${pressed}" isActive=${this.poeWindow.isActive} interactable=${this.overlay.isInteractable}`);
+      // Escape/Ctrl+W while overlay is open → close overlay
+      if (this.overlay.isInteractable && (pressed === "Escape" || pressed === "Ctrl + W")) {
+        console.log(`[GFN] ${pressed} → closing overlay`);
+        process.nextTick(() => {
+          this.overlay.assertGameActive();
+          this.updateOverlayKeySuppressors();
+        });
+        return;
+      }
+
+      if (!this.poeWindow.isActive && !this.overlay.isInteractable) return;
+
       for (const entry of this.actions) {
         if (entry.shortcut === pressed) {
           console.log(`[GFN] uIOhook matched: "${pressed}" → ${entry.action.type}`);
@@ -138,7 +151,10 @@ export class Shortcuts {
 
           // Must use nextTick — uIOhook callback runs on native thread,
           // OverlayController calls must happen on main JS thread
-          process.nextTick(() => this.handleGfnAction(entry));
+          process.nextTick(() => {
+            this.handleGfnAction(entry);
+            this.updateOverlayKeySuppressors();
+          });
           break;
         }
       }
@@ -242,7 +258,14 @@ export class Shortcuts {
     }
 
     if (this._isGfnMode) {
-      console.log(`[GFN] ${validActions.length} actions loaded (uIOhook mode)`);
+      console.log(`[GFN] ${validActions.length} actions loaded (uIOhook mode):`);
+      for (const a of validActions) {
+        console.log(`  [GFN]   "${a.shortcut}" → ${a.action.type}`);
+      }
+      // Register globalShortcut with no-op callbacks purely to suppress
+      // key events from reaching GFN (Carbon HotKey consumes the event).
+      // uIOhook (CGEventTap) still fires first and handles the action.
+      this.registerGfnSuppressors();
     }
   }
 
@@ -257,6 +280,11 @@ export class Shortcuts {
       const { action } = entry;
       const pressPosition = screen.getCursorScreenPoint();
       console.log("[GFN] copy-item → OCR pipeline");
+      // Hide overlay before screenshot so we capture the game, not our UI
+      if (this.overlay.isInteractable) {
+        this.overlay.assertGameActive();
+        this.updateOverlayKeySuppressors();
+      }
       captureScreenAroundCursor()
         .then((capture) => {
           if (capture.image.width === 0 || capture.image.height === 0) {
@@ -268,18 +296,19 @@ export class Shortcuts {
           console.log(`[GFN] OCR done in ${Math.round(result.elapsed)}ms`);
           if (result.clipboard) {
             this.areaTracker.removeListeners();
-            this.server.sendEventTo("last-active", {
+            // GFN: use broadcast (not last-active) to ensure renderer gets it
+            this.server.sendEventTo("broadcast", {
               name: "MAIN->CLIENT::item-text",
               payload: {
                 target: action.target,
                 clipboard: result.clipboard,
                 position: pressPosition,
-                focusOverlay: Boolean(action.focusOverlay),
+                focusOverlay: true,
               },
             });
-            if (action.focusOverlay && this.overlay.wasUsedRecently) {
-              this.overlay.assertOverlayActive();
-            }
+            // GFN: always show overlay after price check — user explicitly triggered it
+            this.overlay.assertOverlayActive();
+            this.updateOverlayKeySuppressors();
           } else {
             console.log("[GFN] Could not reconstruct clipboard from OCR");
           }
@@ -453,6 +482,39 @@ export class Shortcuts {
     for (const entry of this.actions) {
       globalShortcut.unregister(shortcutToElectron(entry.shortcut));
     }
+  }
+
+  /** Dynamically register/unregister Escape+Ctrl+W suppressors based on overlay state. */
+  private _overlayKeysRegistered = false;
+  private updateOverlayKeySuppressors() {
+    if (!this._isGfnMode) return;
+    const overlayOpen = this.overlay.isInteractable;
+    if (overlayOpen && !this._overlayKeysRegistered) {
+      globalShortcut.register("Escape", () => {});
+      globalShortcut.register("CommandOrControl+W", () => {});
+      this._overlayKeysRegistered = true;
+      console.log("[GFN] Registered Escape/Ctrl+W suppressors");
+    } else if (!overlayOpen && this._overlayKeysRegistered) {
+      globalShortcut.unregister("Escape");
+      globalShortcut.unregister("CommandOrControl+W");
+      this._overlayKeysRegistered = false;
+      console.log("[GFN] Unregistered Escape/Ctrl+W suppressors");
+    }
+  }
+
+  /** Register globalShortcut no-ops so Carbon HotKey API consumes key events before GFN sees them. */
+  private registerGfnSuppressors() {
+    this.unregister(); // clear any previous registrations
+    for (const entry of this.actions) {
+      const electronKey = shortcutToElectron(entry.shortcut);
+      const ok = globalShortcut.register(electronKey, () => {
+        // no-op: uIOhook handles the action, this just suppresses the event
+      });
+      if (!ok) {
+        console.log(`[GFN] Failed to register suppressor for "${entry.shortcut}"`);
+      }
+    }
+    console.log(`[GFN] Registered ${this.actions.length} key suppressors`);
   }
 }
 

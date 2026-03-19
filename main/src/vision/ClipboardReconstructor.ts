@@ -43,6 +43,13 @@ const CLASS_MAP: Record<string, string> = {
   FLASK: "Flasks",
   JEWEL: "Jewels",
   CHARM: "Charms",
+  // Gems — parser expects exact "Uncut X Gems" class names
+  "UNCUT SKILL GEM": "Uncut Skill Gems",
+  "UNCUT SUPPORT GEM": "Uncut Support Gems",
+  "UNCUT SPIRIT GEM": "Uncut Spirit Gems",
+  TABLET: "Tablet",
+  "PRECURSOR TABLET": "Tablet",
+  WAYSTONE: "Waystones",
 };
 
 // Regex patterns for OCR line classification
@@ -52,6 +59,14 @@ const STAT_LINE_RE =
   /^(?:EVASION RATING|ARMOUR|ENERGY SHIELD|WARD|SPIRIT|QUALITY|PHYSICAL DAMAGE|ELEMENTAL DAMAGE|FIRE DAMAGE|COLD DAMAGE|LIGHTNING DAMAGE|CHAOS DAMAGE|CRITICAL HIT CHANCE|ATTACKS PER SECOND|RELOAD TIME|BLOCK CHANCE):\s*.+/i;
 // PREFIX_RE/SUFFIX_RE/IMPLICIT_RE now searched as embedded patterns in parseOcrLines
 const HAS_CHARM_SLOTS_RE = /^HAS\s+\d+.*CHARM SLOTS?/i;
+// Parser expects "Charm Slots: N" — extract N from "HAS N(range) CHARM SLOTS"
+function formatCharmSlots(line: string): string {
+  const match = line.match(/HAS\s+(\d+)/i);
+  return match ? `Charm Slots: ${match[1]}` : line;
+}
+// Flask-specific stat patterns (not in stats.ndjson)
+const FLASK_STAT_RE =
+  /^(RECOVERS|CONSUMES|CURRENTLY HAS|RIGHT CLICK|WHILE IN BELT|REFILL AT|\d+ USES REMAINING)/i;
 const CORRUPTED_RE = /^CORRUPTED$/i;
 const MIRRORED_RE = /^MIRRORED$/i;
 
@@ -70,6 +85,7 @@ interface ParsedOcrItem {
   baseType: string | null;
   requirements: string | null;
   stats: string[];
+  flaskStats: string[];  // "Recovers X Life...", "Currently has N Charges"
   implicitMods: string[];
   explicitMods: string[];
   corrupted: boolean;
@@ -82,11 +98,12 @@ interface ParsedOcrItem {
  */
 function stripTierRanges(text: string): string {
   return text
-    .replace(/(\d+)\(\d+-\d+\)/g, "$1")                 // strip tier ranges
-    .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")  // also handle decimal ranges
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")    // strip diacritics (TỌ→TO)
-    .replace(/^[$#@!]+/, "")                              // strip leading junk chars
-    .replace(/[!€]+$/g, "")                               // strip trailing junk
+    .replace(/^\$(\d)/, "+$1")                            // OCR reads + as $: "$14%" → "+14%"
+    .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
+    .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")     // strip diacritics (TỌ→TO)
+    .replace(/^[$#@!]+/, "")                               // strip leading junk chars
+    .replace(/[!€]+$/g, "")                                // strip trailing junk
     .trim();
 }
 
@@ -181,7 +198,9 @@ function isNoiseLine(line: string): boolean {
   // UI labels (may be truncated by AVF crop: "NVENTORY", "OSMETICS")
   if (/\b(N?VENTORY|OSMETICS?|COSMETICS?|INSPECT)\b/i.test(normalized)) return true;
   // Game info (may have diacritics or partial text)
-  if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|WOODLAND|HIDEOUT|TOWN)\b/i.test(normalized)) return true;
+  if (/\b(SHORT ALLOC|JAPAN|REALM|MONSTER LEVEL|WOODLAND|HIDEOUT|TOWN|DREADNOUGHT)\b/i.test(normalized)) return true;
+  // Allocation modes: "Free for All", "Free tor All" (OCR), "Short Allocation"
+  if (/\bFREE\s+(FOR|TOR)\s+ALL\b/i.test(normalized)) return true;
   if (/\d+\s*GOL[DP]?/i.test(normalized)) return true; // "34 GOLD", "34 GOLPonster" (merged)
   if (/^\*?Monster\s*$/i.test(normalized)) return true; // standalone "Monster" from map overlay
   if (/^\d+\s*(FPS|FBS|г8S)?\s*$/i.test(line)) return true; // FPS counter
@@ -189,6 +208,32 @@ function isNoiseLine(line: string): boolean {
   // "Fate of the Vaal League" split across lines by AVF
   if (/\b(VAAL LEAGUE|VAAL|LEAGUE)\s*$/i.test(normalized) && line.length < 20) return true;
   return false;
+}
+
+/**
+ * Clean noise prefix from mod after PREFIX/SUFFIX/IMPLICIT marker,
+ * then normalize via fuzzy dictionary + stats.ndjson.
+ * "Reali+8(7-10)% TO ALL..." → "+8% to all Elemental Resistances"
+ */
+function normalizeMarkerMod(raw: string): string {
+  let trimmed = raw.trim();
+  // Strip alphabetic noise prefix before the first number or +/-
+  if (!/^[+-\d]/.test(trimmed)) {
+    trimmed = trimmed.replace(/^[A-Za-z\s]*?([+-]?\d)/, "$1");
+  }
+  const stripped = stripTierRanges(trimmed);
+  const fixed = fuzzyFixWords(stripped);
+  return matchStatLine(fixed) ?? fixed;
+}
+
+/**
+ * Format flask stat to match parser expectations.
+ * "RECOVERS 920 LIFE OVER 3 SECONDS" → "Recovers 920 Life over 3 Seconds"
+ */
+function formatFlaskStat(s: string): string {
+  // Use sentence-case: capitalize first word, lowercase rest except proper nouns
+  const lower = s.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 // Set of known class names (uppercase) for simple format detection
@@ -206,6 +251,7 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
     baseType: null,
     requirements: null,
     stats: [],
+    flaskStats: [],
     implicitMods: [],
     explicitMods: [],
     corrupted: false,
@@ -278,8 +324,9 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
   const priorLines: string[] = [];
   for (let i = classIdx - 1; i >= Math.max(0, classIdx - 8); i--) {
     const line = lines[i].trim();
-    if (line.length < 3) continue;
+    if (line.length < 5) continue;
     if (/^[^A-Za-z]*$/.test(line)) continue;
+    if (/[=<>{}|]/.test(line)) continue;
     if (isNoiseLine(line)) continue;
     priorLines.unshift(line);
     if (priorLines.length >= 2) break;
@@ -293,7 +340,7 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
     result.name = result.baseType;
   }
 
-  // Parse lines after class name
+  // Parse lines after class name — WHITELIST approach
   for (let i = classIdx + 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line.length < 3) continue;
@@ -305,22 +352,33 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
     }
 
     if (STAT_LINE_RE.test(line)) {
-      result.stats.push(line);
+      result.stats.push(stripTierRanges(line));
       continue;
     }
 
     if (CORRUPTED_RE.test(line)) { result.corrupted = true; continue; }
     if (MIRRORED_RE.test(line)) { result.mirrored = true; continue; }
-
-    // In simple format, mods have no PREFIX/SUFFIX marker.
-    // They look like: "+72 to maximum Life", "20% increased Movement Speed"
-    if (/^[+-]?\d/.test(line) || /\d+%?\s+(increased|reduced|to)\s/i.test(line)) {
-      result.explicitMods.push(line);
+    if (HAS_CHARM_SLOTS_RE.test(line)) {
+      result.implicitMods.push(formatCharmSlots(line));
       continue;
     }
 
-    // Skip map mods and noise
-    if (NOISE_RE.test(line) || MAP_MOD_RE.test(line)) continue;
+    // Flask/charm stats — separate section for parser compatibility
+    if (FLASK_STAT_RE.test(line)) {
+      result.flaskStats.push(stripTierRanges(line));
+      continue;
+    }
+
+    // Mods: validate via stats.ndjson whitelist
+    const stripped = stripTierRanges(line);
+    const fixed = fuzzyFixWords(stripped);
+    const matched = matchStatLine(fixed);
+    if (matched) {
+      result.explicitMods.push(matched);
+      continue;
+    }
+
+    // Everything else ignored (whitelist: unknown = noise)
   }
 
   return result;
@@ -339,6 +397,7 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     baseType: null,
     requirements: null,
     stats: [],
+    flaskStats: [],
     implicitMods: [],
     explicitMods: [],
     corrupted: false,
@@ -351,8 +410,9 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     const match = lines[i].match(ITEM_LEVEL_RE);
     if (match) {
       // The captured group may contain OCR noise before the class name.
-      // Search for a known class name within it.
-      const rawClass = match[1].trim().toUpperCase();
+      // Normalize diacritics (OCR: "FLAŞK" → "FLASK")
+      const rawClass = match[1].trim().toUpperCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       let foundClass = false;
       for (const cls of CLASS_NAMES) {
         if (new RegExp(`\\b${cls}\\b`).test(rawClass)) {
@@ -374,9 +434,19 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
   }
 
   if (anchorIdx === -1) {
+    // Check for Uncut Gems: "UNCUT SKILL GEM (LEVEL 15)"
+    for (const line of lines) {
+      const gemMatch = line.match(/^(UNCUT\s+(?:SKILL|SUPPORT|SPIRIT)\s+GEM)\s*\(LEVEL?\s*(\d+)\)/i);
+      if (gemMatch) {
+        const gemType = gemMatch[1].toUpperCase().replace(/\s+/g, " ");
+        result.itemClass = CLASS_MAP[gemType] || "Uncut Skill Gems";
+        result.baseType = toTitleCase(gemMatch[1]) + ` (Level ${gemMatch[2]})`;
+        result.name = result.baseType;
+        return result;
+      }
+    }
+
     // Fallback: simple tooltip format (no Alt held).
-    // Class appears as standalone line: "Boots", "Ring", "Belt", etc.
-    // Format: Name / BaseType / Class / stats / requirements / mods
     return parseSimpleFormat(lines);
   }
 
@@ -387,8 +457,9 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
   const priorLines: string[] = [];
   for (let i = anchorIdx - 1; i >= Math.max(0, anchorIdx - 8); i--) {
     const line = lines[i].trim();
-    if (line.length < 3) continue;
+    if (line.length < 5) continue; // reject short fragments ("Fre", "= TOT")
     if (/^[^A-Za-z]*$/.test(line)) continue;
+    if (/[=<>{}|]/.test(line)) continue; // reject OCR junk with special chars
     if (isNoiseLine(line)) continue;
     if (/^\d+%?\s+(INCREASED|REDUCED|MORE|LESS)\s/i.test(line)) continue;
     priorLines.unshift(line);
@@ -403,90 +474,85 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     result.name = result.baseType; // Normal/Currency items have same name
   }
 
-  // Work forwards from anchor to find requirements, stats, and mods
+  // Work forwards from anchor: WHITELIST approach.
+  // Only accept lines matching known tooltip patterns.
   for (let i = anchorIdx + 1; i < lines.length; i++) {
-    let line = lines[i].trim();
+    const line = lines[i].trim();
     if (line.length < 3) continue;
 
-    // OCR (especially AVF) often merges map mods and item mods on one line, e.g.:
-    // "150% INCREASED EXPEDITION RADIUS PREFIX +85(85-99) TO MAXIMUM LIFE"
-    // "4 CONTAINS 7 ADDITIONAL PACKS... ADDS 13(11-13) TO 18(18-21) COLD DAMAGE"
-    // "MONSTERS DEAL 16% OF DAMAGE... LEECH 7.18% OF PHYSICAL ATTACK DAMAGE AS LIFE"
-
-    // Extract PREFIX/SUFFIX/IMPLICIT from anywhere in the line first
-    const embeddedPrefix = line.match(/\bPREFIX\s+(.+)/i);
-    const embeddedSuffix = line.match(/\bSUFFIX\s+(.+)/i);
-    const embeddedImplicit = line.match(/\bIMPLICIT\s+(.+)/i);
-    if (embeddedPrefix) {
-      result.explicitMods.push(stripTierRanges(embeddedPrefix[1].trim()));
-      continue;
-    }
-    if (embeddedSuffix) {
-      result.explicitMods.push(stripTierRanges(embeddedSuffix[1].trim()));
-      continue;
-    }
-    if (embeddedImplicit) {
-      result.implicitMods.push(stripTierRanges(embeddedImplicit[1].trim()));
-      continue;
-    }
-
-    // Try to extract item mod from merged map+item lines.
-    // AVF merges text at same Y height, so map mod on left + item mod on right
-    // become one string. Look for known item mod patterns embedded in noise.
-    const extractedMod = extractEmbeddedMod(line);
-    if (extractedMod) {
-      result.explicitMods.push(stripTierRanges(extractedMod));
-      continue;
-    }
-
-    // Filter out map/area mods and UI noise
-    if (NOISE_RE.test(line) || MAP_MOD_RE.test(line)) continue;
-
+    // 1. Requirements
     const reqMatch = line.match(REQUIRES_RE);
     if (reqMatch) {
       result.requirements = reqMatch[1].trim();
       continue;
     }
 
+    // 2. Stats (Armour, Evasion Rating, Quality, etc.)
     if (STAT_LINE_RE.test(line)) {
       result.stats.push(stripTierRanges(line));
       continue;
     }
 
+    // 3. Corrupted / Mirrored
+    if (CORRUPTED_RE.test(line)) { result.corrupted = true; continue; }
+    if (MIRRORED_RE.test(line)) { result.mirrored = true; continue; }
+
+    // 4. Charm slots implicit
     if (HAS_CHARM_SLOTS_RE.test(line)) {
-      result.implicitMods.push(stripTierRanges(line));
+      result.implicitMods.push(formatCharmSlots(line));
       continue;
     }
 
-    if (CORRUPTED_RE.test(line)) {
-      result.corrupted = true;
+    // 5. Flask/charm stats → separate array for proper section formatting
+    if (FLASK_STAT_RE.test(line)) {
+      result.flaskStats.push(stripTierRanges(line));
       continue;
     }
 
-    if (MIRRORED_RE.test(line)) {
-      result.mirrored = true;
-      continue;
-    }
-
-    // Lines that look like mods (start with +/- or contain % INCREASED/REDUCED)
-    // but without PREFIX/SUFFIX marker — could be continuation or unlabeled mod
-    if (/^[+-]?\d/.test(line) || /\d+%?\s+(INCREASED|REDUCED|TO)\s/i.test(line)) {
-      result.explicitMods.push(stripTierRanges(line));
-      continue;
-    }
-
-    // "GAIN X resource PER ENEMY HIT" / "ADDS X TO Y damage" as standalone lines
-    if (/^(GAIN|ADDS)\s+\d/i.test(line)) {
-      result.explicitMods.push(stripTierRanges(line));
-      continue;
-    }
-
-    // Skip tier markers (T1-T10, standalone)
+    // 6. Tier markers (T1-T10) — skip silently
     if (/^T\d{1,2}$/i.test(line)) continue;
 
-    // Skip map mods and other noise
-    if (/^(MONSTERS|AREA|RARE MONSTERS|CONTAINS)\s/i.test(line)) continue;
-    if (/^(INVENTORY|COSMETICS|INSPECT)\s*$/i.test(line)) continue;
+    // 6. PREFIX/SUFFIX/IMPLICIT markers → extract the mod text after.
+    // OCR may merge noise before the marker: "Japan Re IMPLICIT +8% TO ALL..."
+    // Strip any non-mod prefix: find first +/- or digit after marker.
+    const embeddedPrefix = line.match(/\bPREFIX\s+(.+)/i);
+    const embeddedSuffix = line.match(/\bSUFFIX\s+(.+)/i);
+    const embeddedImplicit = line.match(/\bIMPLICIT\s+(.+)/i);
+    if (embeddedPrefix) {
+      const mod = normalizeMarkerMod(embeddedPrefix[1]);
+      if (mod) { result.explicitMods.push(mod); continue; }
+    }
+    if (embeddedSuffix) {
+      const mod = normalizeMarkerMod(embeddedSuffix[1]);
+      if (mod) { result.explicitMods.push(mod); continue; }
+    }
+    if (embeddedImplicit) {
+      const mod = normalizeMarkerMod(embeddedImplicit[1]);
+      if (mod) { result.implicitMods.push(mod); continue; }
+      continue;
+    }
+
+    // 7. Mod lines — WHITELIST via stats.ndjson matching.
+    // Only accept lines that match a known game stat pattern.
+    const stripped = stripTierRanges(line);
+    const fixed = fuzzyFixWords(stripped);
+    const matched = matchStatLine(fixed);
+    if (matched) {
+      result.explicitMods.push(matched);
+      continue;
+    }
+
+    // 8. Embedded mod extraction (AVF merges map mods + item mods on one line)
+    const extractedMod = extractEmbeddedMod(line);
+    if (extractedMod) {
+      const eMod = stripTierRanges(extractedMod);
+      const eFixed = fuzzyFixWords(eMod);
+      const eMatched = matchStatLine(eFixed);
+      result.explicitMods.push(eMatched ?? eMod);
+      continue;
+    }
+
+    // Everything else is ignored (whitelist approach: unknown = noise)
   }
 
   return result;
@@ -496,10 +562,11 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
  * Determine rarity from parsed data.
  */
 function detectRarity(parsed: ParsedOcrItem): string {
+  // Uncut gems are always Currency rarity
+  if (parsed.itemClass?.startsWith("Uncut ")) return "Currency";
+
   const totalMods = parsed.explicitMods.length + parsed.implicitMods.length;
   if (totalMods === 0) return "Normal";
-  // 3+ explicit mods is almost certainly Rare
-  // Even 2 prefix+suffix is Rare (magic has max 1 prefix + 1 suffix)
   if (parsed.explicitMods.length >= 2) return "Rare";
   return "Magic";
 }
@@ -527,16 +594,8 @@ export function reconstructClipboard(ocrText: string): string | null {
     console.log(`[GFN] No base type found, using item class: ${parsed.itemClass}`);
   }
 
-  // Normalize mods: fix OCR typos via dictionary, then match against stats.ndjson.
-  // "STRENCTH" → "STRENGTH", "+137 TO MAXIMUM LIFE" → "+137 to Maximum Life"
-  parsed.explicitMods = parsed.explicitMods.map((mod) => {
-    const fixed = fuzzyFixWords(mod);
-    return matchStatLine(fixed) ?? fixed;
-  });
-  parsed.implicitMods = parsed.implicitMods.map((mod) => {
-    const fixed = fuzzyFixWords(mod);
-    return matchStatLine(fixed) ?? fixed;
-  });
+  // Mods are already normalized in parseOcrLines/parseSimpleFormat via
+  // fuzzyFixWords + matchStatLine whitelist.
 
   const rarity = detectRarity(parsed);
   const sections: string[] = [];
@@ -554,8 +613,11 @@ export function reconstructClipboard(ocrText: string): string | null {
     sections.push(
       parsed.stats
         .map((s) => {
-          const [label, ...rest] = s.split(":");
-          return toTitleCase(label.trim()) + ":" + rest.join(":");
+          const colonIdx = s.indexOf(":");
+          if (colonIdx === -1) return toTitleCase(s.trim());
+          const label = s.slice(0, colonIdx).trim();
+          const value = s.slice(colonIdx + 1).trim();
+          return toTitleCase(label) + ": " + value;
         })
         .join("\n"),
     );
@@ -576,17 +638,37 @@ export function reconstructClipboard(ocrText: string): string | null {
     sections.push(`Item Level: ${parsed.itemLevel}`);
   }
 
-  // Section 5: Implicit mods
+  // Section 5: Flask stats — parser expects exact format:
+  // - "Recovers X Life over Y Seconds" etc. in one section
+  // - "Currently has N Charges" in its OWN section (parser regex: /^Currently has \d+ Charges$/)
+  if (parsed.flaskStats.length > 0) {
+    const chargesLine = parsed.flaskStats.find((s) => /^CURRENTLY HAS/i.test(s));
+    const otherFlask = parsed.flaskStats.filter((s) =>
+      !/^CURRENTLY HAS|^RIGHT CLICK|^WHILE IN BELT|^REFILL AT/i.test(s),
+    );
+    if (otherFlask.length > 0) {
+      sections.push(
+        otherFlask.map((s) => formatFlaskStat(s)).join("\n"),
+      );
+    }
+    if (chargesLine) {
+      // Parser expects EXACT: "Currently has N Charges" (case-sensitive regex)
+      const n = chargesLine.match(/\d+/)?.[0] ?? "0";
+      sections.push(`Currently has ${n} Charges`);
+    }
+  }
+
+  // Section 6: Implicit mods
   if (parsed.implicitMods.length > 0) {
     sections.push(parsed.implicitMods.join("\n"));
   }
 
-  // Section 6: Explicit mods
+  // Section 7: Explicit mods
   if (parsed.explicitMods.length > 0) {
     sections.push(parsed.explicitMods.join("\n"));
   }
 
-  // Section 7: Corrupted/Mirrored
+  // Section 8: Corrupted/Mirrored
   if (parsed.corrupted) {
     sections.push("Corrupted");
   }
@@ -595,6 +677,18 @@ export function reconstructClipboard(ocrText: string): string | null {
   }
 
   const result = sections.join("\n--------\n");
+
+  // Validate: simulate what renderer parser expects
+  const vLines = result.split("\n");
+  const issues: string[] = [];
+  if (!vLines[0]?.startsWith("Item Class: ")) issues.push("missing 'Item Class: ' prefix");
+  if (!vLines[1]?.startsWith("Rarity: ")) issues.push("missing 'Rarity: ' prefix");
+  if (!vLines[2] || vLines[2].length < 3) issues.push("missing item name");
+  if (result.indexOf("--------") === -1) issues.push("no section separators");
+  if (issues.length > 0) {
+    console.log(`[GFN] ⚠ Clipboard validation issues: ${issues.join(", ")}`);
+  }
+
   console.log(`[GFN] Reconstructed clipboard (${result.length} chars):\n${result}`);
   return result;
 }

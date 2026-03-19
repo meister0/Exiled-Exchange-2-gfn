@@ -118,7 +118,16 @@ function clusterTooltipObservations(
   );
 
   if (!anchor) {
-    console.log("[GFN-AVF] No ITEM LEVEL anchor found, falling back to proximity clustering");
+    // Fallback: use CLASS name as anchor for simple format (no Alt held)
+    const CLASS_NAMES_RE = /^(AMULET|RING|BELT|QUIVER|GLOVES|HELMET|BOOTS|BODY ARMOUR|SHIELD|FOCUS|BOW|CROSSBOW|WAND|SCEPTRE|STAFF|TWO HAND (?:MACE|SWORD)|ONE HAND (?:MACE|SWORD)|FLAIL|SPEAR|QUARTERSTAFF|DAGGER|CLAW|TRAP|FLASK|JEWEL|CHARM)S?$/i;
+    const classAnchor = observations.find((o) => CLASS_NAMES_RE.test(o.text.trim()));
+    if (classAnchor) {
+      console.log(
+        `[GFN-AVF] No ITEM LEVEL, using class anchor: "${classAnchor.text}" at (${classAnchor.bbox.x},${classAnchor.bbox.y})`,
+      );
+      return clusterByXColumn(observations, classAnchor);
+    }
+    console.log("[GFN-AVF] No anchor found, falling back to proximity clustering");
     return proximityFallback(observations, cursor, imgWidth, imgHeight);
   }
 
@@ -126,50 +135,52 @@ function clusterTooltipObservations(
     `[GFN-AVF] Anchor: "${anchor.text}" at (${anchor.bbox.x},${anchor.bbox.y}) ${anchor.bbox.w}x${anchor.bbox.h}`,
   );
 
-  // Step 2: Use anchor's center X to define the tooltip column.
-  // PoE2 tooltip is wider than the anchor line: mod lines with PREFIX/SUFFIX markers
-  // start ~300px left of the anchor, tier markers (T4) appear ~500px right.
-  // Map mods are on the opposite side of the screen (X near 0).
-  const anchorCenterX = anchor.bbox.x + anchor.bbox.w / 2;
-  const xRadius = anchor.bbox.w * 2; // generous: ~530px each side
+  return clusterByXColumn(observations, anchor);
+}
 
-  // Step 3: Filter observations whose horizontal center falls within tooltip column.
+/**
+ * Cluster observations by X-column alignment relative to an anchor.
+ * Works for both ITEM LEVEL and CLASS NAME anchors.
+ */
+// Quick noise check for observations that should never be in tooltip
+const OBS_NOISE_RE = /^(N?VENTORY|COSMETICS?|INSPECT|ALT|ANGE|FREE\s+(FOR|TOR)\s+ALL|JAPAN|EXILED EXCHANGE|IS READY|RUNNING IN)\b/i;
+
+function clusterByXColumn(
+  observations: AvfTextObservation[],
+  anchor: AvfTextObservation,
+): AvfTextObservation[] {
+  const anchorCenterX = anchor.bbox.x + anchor.bbox.w / 2;
+  const xRadius = anchor.bbox.w * 2;
+
+  // Tighter X radius for lines above anchor (name/base type are centered)
+  // Wider for lines below (PREFIX/SUFFIX labels are offset left)
+  const xRadiusAbove = anchor.bbox.w * 1.2;
+
   const candidates = observations.filter((obs) => {
+    if (OBS_NOISE_RE.test(obs.text.trim())) return false;
     const obsCenterX = obs.bbox.x + obs.bbox.w / 2;
-    return Math.abs(obsCenterX - anchorCenterX) < xRadius;
+    const aboveAnchor = obs.bbox.y < anchor.bbox.y;
+    const limit = aboveAnchor ? xRadiusAbove : xRadius;
+    return Math.abs(obsCenterX - anchorCenterX) < limit;
   });
 
-  if (candidates.length < 3) {
-    // Too few matches — widen the search
-    return proximityFallback(observations, cursor, imgWidth, imgHeight);
-  }
+  if (candidates.length < 3) return [anchor];
 
-  // Step 4: Sort by Y and filter for vertical contiguity.
-  // Remove observations that have a large gap from the main cluster.
   candidates.sort((a, b) => a.bbox.y - b.bbox.y);
-
-  // Find anchor index in sorted candidates
   const anchorIdx = candidates.indexOf(anchor);
-
-  // Typical line height from anchor
   const lineHeight = anchor.bbox.h * 1.8;
 
-  // Expand upward from anchor
   const result: AvfTextObservation[] = [anchor];
   for (let i = anchorIdx - 1; i >= 0; i--) {
-    const curr = candidates[i];
-    const gap = (result[0].bbox.y) - (curr.bbox.y + curr.bbox.h);
-    if (gap > lineHeight * 2) break; // too large a gap — stop
-    result.unshift(curr);
+    const gap = result[0].bbox.y - (candidates[i].bbox.y + candidates[i].bbox.h);
+    if (gap > lineHeight * 2) break;
+    result.unshift(candidates[i]);
   }
-
-  // Expand downward from anchor
   for (let i = anchorIdx + 1; i < candidates.length; i++) {
-    const lastIncluded = result[result.length - 1];
-    const curr = candidates[i];
-    const gap = curr.bbox.y - (lastIncluded.bbox.y + lastIncluded.bbox.h);
-    if (gap > lineHeight * 2) break; // too large a gap — stop
-    result.push(curr);
+    const last = result[result.length - 1];
+    const gap = candidates[i].bbox.y - (last.bbox.y + last.bbox.h);
+    if (gap > lineHeight * 2) break;
+    result.push(candidates[i]);
   }
 
   return result;
