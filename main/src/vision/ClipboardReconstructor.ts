@@ -435,10 +435,10 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
   };
 
   // Find the "CLASS: ITEM LEVEL N" anchor line
-  // Apply fuzzy to fix OCR errors in class/level text
+  // Don't fuzzyFix here — it can corrupt class names (TABLET → Tablets)
   let anchorIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    const match = fuzzyFixWords(lines[i]).match(ITEM_LEVEL_RE);
+    const match = lines[i].match(ITEM_LEVEL_RE);
     if (match) {
       // The captured group may contain OCR noise before the class name.
       // Normalize diacritics (OCR: "FLAŞK" → "FLASK")
