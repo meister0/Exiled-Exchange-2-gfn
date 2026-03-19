@@ -572,20 +572,44 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
     // b) Standalone marker: "IMPLICIT" → next line is the mod
     // c) OCR corrupted: "IMPLCIT", "PREFX"
     const markerOnly = /^(IMPL[I1]C[I1]T?|PREF[I1]X|SUFF[I1]X)$/i.test(line);
-    if (markerOnly && i + 1 < lines.length) {
+    if (markerOnly) {
       const markerType = /IMPL/i.test(line) ? "implicit" : "explicit";
-      let modLine = fuzzyFixWords(lines[i + 1].trim());
-      i++;
-      // Merge multi-line mods: "Adds X to a Map" + "N uses remaining"
-      const nextNext = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
-      if (/\d+\s+uses?\s+remaining/i.test(nextNext)) {
-        modLine = modLine + "\n" + stripTierRanges(nextNext);
+      const target = markerType === "implicit" ? result.implicitMods : result.explicitMods;
+
+      // OCR may place marker AFTER the mod text (same Y position, different X).
+      // Check if PREVIOUS line is a mod that wasn't matched — reclaim it.
+      // Also check NEXT line as the mod.
+      let modLine = "";
+
+      // Look back: previous line might be first part of multi-line mod
+      const prevLine = (i > anchorIdx + 1) ? lines[i - 1].trim() : "";
+      const nextLine = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
+
+      if (prevLine && !/^(IMPL|PREF|SUFF|T\d)/i.test(prevLine) && nextLine) {
+        // Previous line + next line could be multi-line mod
+        modLine = fuzzyFixWords(prevLine);
+        if (/\d+\s+uses?\s+remaining/i.test(nextLine)) {
+          modLine = modLine + "\n" + stripTierRanges(nextLine);
+          i++;
+        }
+        // Remove previous line from explicit mods if it was wrongly added
+        const prevIdx = result.explicitMods.indexOf(prevLine);
+        if (prevIdx >= 0) result.explicitMods.splice(prevIdx, 1);
+      } else if (nextLine) {
+        modLine = nextLine;
         i++;
+        // Merge multi-line: "Adds X to a Map" + "N uses remaining"
+        const nextNext = (i + 1 < lines.length) ? fuzzyFixWords(lines[i + 1].trim()) : "";
+        if (/\d+\s+uses?\s+remaining/i.test(nextNext)) {
+          modLine = modLine + "\n" + stripTierRanges(nextNext);
+          i++;
+        }
       }
-      const mod = normalizeMarkerMod(modLine);
-      console.log(`[GFN-OCR] standalone ${line} marker → "${mod}"`);
-      if (mod) {
-        (markerType === "implicit" ? result.implicitMods : result.explicitMods).push(mod);
+
+      if (modLine) {
+        const mod = normalizeMarkerMod(modLine);
+        console.log(`[GFN-OCR] standalone ${line} marker → "${mod.replace(/\n/g, "\\n")}"`);
+        if (mod) target.push(mod);
       }
       continue;
     }
