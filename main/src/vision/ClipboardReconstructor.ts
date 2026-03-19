@@ -100,6 +100,7 @@ interface ParsedOcrItem {
 function stripTierRanges(text: string): string {
   return text
     .replace(/^\$(\d)/, "+$1")                            // OCR reads + as $: "$14%" → "+14%"
+    .replace(/(\d)['`''](\d)/g, "$1-$2")                 // OCR reads - as apostrophe: "26'37" → "26-37"
     .replace(/([A-Za-z])[.,]\s+([A-Za-z])/g, "$1 $2")   // OCR stray punctuation: "COLD. DAMAGE" → "COLD DAMAGE"
     .replace(/(\d+)\(\d+-\d+\)/g, "$1")                  // strip tier ranges
     .replace(/(\d+[\d.]*)\([\d.]+[-–][\d.]+\)/g, "$1")   // also handle decimal ranges
@@ -225,7 +226,7 @@ function normalizeMarkerMod(raw: string): string {
   }
   const stripped = stripTierRanges(trimmed);
   const fixed = fuzzyFixWords(stripped);
-  return matchStatLine(fixed) ?? fixed;
+  return matchStatLine(fixed)?.text ?? fixed;
 }
 
 /**
@@ -401,7 +402,7 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
       }
     }
     if (matched) {
-      result.explicitMods.push(matched);
+      (matched.implicitOnly ? result.implicitMods : result.explicitMods).push(matched.text);
       continue;
     }
 
@@ -576,7 +577,8 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       }
     }
     if (matched) {
-      result.explicitMods.push(matched);
+      // Route to implicit or explicit based on stats.ndjson trade IDs
+      (matched.implicitOnly ? result.implicitMods : result.explicitMods).push(matched.text);
       continue;
     }
 
@@ -586,7 +588,11 @@ function parseOcrLines(lines: string[]): ParsedOcrItem {
       const eMod = stripTierRanges(extractedMod);
       const eFixed = fuzzyFixWords(eMod);
       const eMatched = matchStatLine(eFixed);
-      result.explicitMods.push(eMatched ?? eMod);
+      if (eMatched) {
+        (eMatched.implicitOnly ? result.implicitMods : result.explicitMods).push(eMatched.text);
+      } else {
+        result.explicitMods.push(eMod);
+      }
       continue;
     }
 

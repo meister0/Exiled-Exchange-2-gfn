@@ -2,12 +2,16 @@ import fs from "fs";
 import path from "path";
 
 interface MatcherEntry {
-  /** Regex to match OCR text (case-insensitive, # → number groups) */
   regex: RegExp;
-  /** Canonical form from stats.ndjson (e.g. "# to Maximum Life") */
   template: string;
-  /** Number of # placeholders */
   numSlots: number;
+  /** true if this stat only has implicit trade IDs (no explicit) */
+  implicitOnly: boolean;
+}
+
+export interface StatMatchResult {
+  text: string;
+  implicitOnly: boolean;
 }
 
 let entries: MatcherEntry[] | null = null;
@@ -32,6 +36,11 @@ export function loadStatMatchers(dataDir: string): void {
 
   for (const line of lines) {
     const d = JSON.parse(line);
+    // Check if stat is implicit-only (has implicit trade ID but no explicit)
+    const tradeIds = d.trade?.ids || {};
+    const implicitOnly = Boolean(tradeIds.implicit?.length) &&
+      !tradeIds.explicit?.length && !tradeIds.pseudo?.length;
+
     for (const m of d.matchers || []) {
       if (!m.string) continue;
       const template = m.string.trim();
@@ -50,7 +59,7 @@ export function loadStatMatchers(dataDir: string): void {
 
       try {
         const regex = new RegExp("^" + escaped + "$", "i");
-        entries.push({ regex, template, numSlots });
+        entries.push({ regex, template, numSlots, implicitOnly });
       } catch {
         // skip invalid regex
       }
@@ -82,36 +91,34 @@ export function addDictionaryWords(words: string[]): void {
  *
  * Example: "+137 TO MAXIMUM LIFE" → "+137 to Maximum Life"
  */
-export function matchStatLine(ocrLine: string): string | null {
+export function matchStatLine(ocrLine: string): StatMatchResult | null {
   if (!entries) return null;
 
   const trimmed = ocrLine.trim();
   if (!trimmed) return null;
 
-  // First try exact regex match
-  for (const entry of entries) {
-    const match = trimmed.match(entry.regex);
-    if (match) {
-      let result = entry.template;
-      for (let i = 1; i <= entry.numSlots; i++) {
-        result = result.replace("#", match[i]);
-      }
-      return result;
-    }
-  }
-
-  // If no exact match, fix OCR words via fuzzy dictionary and retry
-  const fixed = fuzzyFixWords(trimmed);
-  if (fixed !== trimmed) {
+  function tryMatch(text: string): StatMatchResult | null {
     for (const entry of entries) {
-      const match = fixed.match(entry.regex);
+      const match = text.match(entry.regex);
       if (match) {
         let result = entry.template;
         for (let i = 1; i <= entry.numSlots; i++) {
           result = result.replace("#", match[i]);
         }
-        return result;
+        return { text: result, implicitOnly: entry.implicitOnly };
       }
+    }
+    return null;
+  }
+
+  // Try exact, then fuzzy
+  const exact = tryMatch(trimmed);
+  if (exact) return exact;
+
+  const fixed = fuzzyFixWords(trimmed);
+  if (fixed !== trimmed) {
+    const fuzzyResult = tryMatch(fixed);
+    if (fuzzyResult) return fuzzyResult;
     }
   }
 
