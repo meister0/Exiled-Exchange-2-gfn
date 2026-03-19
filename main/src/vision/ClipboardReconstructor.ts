@@ -313,32 +313,37 @@ function parseSimpleFormat(lines: string[]): ParsedOcrItem {
   };
 
   // Find class name line. In simple format it's a standalone line like "Boots".
-  // But OCR may merge it with adjacent text, so also look for class name
-  // at the START of a line or as a near-exact match.
+  // Prefer exact match first (full pass), then fallback to word-boundary match.
+  // This prevents "CANNONADE CROSSBOW" (base type) matching before "CROSSBOW" (class label).
   let classIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    const upper = trimmed.toUpperCase();
 
-    // Exact match
+  // Pass 1: exact match only
+  for (let i = 0; i < lines.length; i++) {
+    const upper = lines[i].trim().toUpperCase();
     if (CLASS_NAMES.has(upper)) {
       result.itemClass = CLASS_MAP[upper]!;
       classIdx = i;
       break;
     }
-
-    // Class name anywhere in the line as a whole word
-    // e.g., "a ' _ _. BELT" or "BOOTS INVENTORY"
-    for (const cls of CLASS_NAMES) {
-      const re = new RegExp(`\\b${cls}\\b`);
-      if (re.test(upper)) {
-        result.itemClass = CLASS_MAP[cls]!;
-        classIdx = i;
-        break;
-      }
-    }
-    if (classIdx !== -1) break;
   }
+
+  // Pass 2: word-boundary match (if no exact match found)
+  if (classIdx === -1) {
+    for (let i = 0; i < lines.length; i++) {
+      const upper = lines[i].trim().toUpperCase();
+      for (const cls of CLASS_NAMES) {
+        const re = new RegExp(`\\b${cls}\\b`);
+        if (re.test(upper)) {
+          result.itemClass = CLASS_MAP[cls]!;
+          classIdx = i;
+          break;
+        }
+      }
+      if (classIdx !== -1) break;
+    }
+  }
+
+  console.log(`[GFN-OCR] parseSimpleFormat: classIdx=${classIdx}, class=${result.itemClass}, line="${classIdx >= 0 ? lines[classIdx]?.slice(0, 40) : "N/A"}"`);
 
   // Fallback: find anchor via REQUIRES line and work backwards
   if (classIdx === -1) {
