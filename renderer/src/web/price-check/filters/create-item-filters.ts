@@ -472,9 +472,10 @@ export function createFilters(
   }
 
   if (item.category === ItemCategory.Tablet && !item.isUnidentified) {
-    const usesRemaining = item.statsByType.find(
+    const implicitStat = item.statsByType.find(
       (t) => t.type === ModifierType.Implicit,
-    )!.sources[0].contributes!.value;
+    );
+    const usesRemaining = implicitStat?.sources?.[0]?.contributes?.value ?? 0;
     filters.usesRemaining = {
       value: usesRemaining,
       disabled: usesRemaining < 10,
