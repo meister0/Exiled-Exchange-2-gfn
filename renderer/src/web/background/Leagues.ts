@@ -58,6 +58,7 @@ export const useLeagues = createGlobalState(() => {
       tradeLeagues.value = leagues.result.map((league) => {
         return { id: league.id, isPopular: true, text: league.text };
       });
+      console.log(`[Leagues] loaded ${tradeLeagues.value.length}: ${tradeLeagues.value.map(l => l.id).join(", ")}. current=${selectedId.value}`);
 
       const leagueIsAlive = tradeLeagues.value.some(
         (league) => league.id === selectedId.value,
@@ -70,9 +71,11 @@ export const useLeagues = createGlobalState(() => {
           const STANDARD = 0;
           selectedId.value = tradeLeagues.value[STANDARD].id;
         }
+        console.log(`[Leagues] auto-selected: ${selectedId.value}`);
       }
     } catch (e) {
       error.value = (e as Error).message;
+      console.log(`[Leagues] FAILED: ${error.value}`);
     } finally {
       isLoading.value = false;
     }
