@@ -2,7 +2,7 @@ import { desktopCapturer, screen } from "electron";
 import type { ImageData } from "./utils";
 
 const CROP_WIDTH = 900;
-const CROP_HEIGHT = 700;
+const CROP_HEIGHT = 900;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 200;
 
@@ -60,9 +60,9 @@ export async function captureScreenAroundCursor(): Promise<{
   const cropW = Math.round(CROP_WIDTH * scaleFactor);
   const cropH = Math.round(CROP_HEIGHT * scaleFactor);
 
-  // Center crop on cursor
+  // Offset crop upward — tooltip is usually above cursor
   let x0 = cx - Math.round(cropW / 2);
-  let y0 = cy - Math.round(cropH / 2);
+  let y0 = cy - Math.round(cropH * 0.65);
   // Clamp crop to screen bounds
   const effectiveCropW = Math.min(cropW, fullW);
   const effectiveCropH = Math.min(cropH, fullH);
